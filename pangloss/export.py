@@ -204,57 +204,57 @@ def generate_html(metadata: StoryMetadata, audio_chunks: dict, source_lang: str,
                     sortedWords.forEach(dw => {{
                         const anchors = dw.anchors || [dw.word];
                         anchors.forEach(anchor => {{
-                            const escaped = anchor.replace(/[.*+?^${{}}(\)|[\]\\]/g, '\\\\$&');
-                            const regex = new RegExp(\`(\\\\b)\${{escaped}}(\\\\b)\`, 'gi');
-                            transPara = transPara.replace(regex, \`$1<span class="word">\${{anchor}}<div class="tooltip"><strong>\${{dw.word}}</strong>: \${{dw.explanation}}</div></span>$2\`);
+                            const escaped = anchor.replace(/[.*+?^${{}}()|[\\]\\\\]/g, '\\\\$&');
+                            const regex = new RegExp("\\\\b" + escaped + "\\\\b", 'gi');
+                            transPara = transPara.replace(regex, `<span class="word">$&<div class="tooltip"><strong>${{dw.word}}</strong>: ${{dw.explanation}}</div></span>`);
                         }});
                     }});
 
-                    return \`
+                    return `
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-start mb-8 last:mb-0">
-                            <div id="orig-\${{p.id}}-\${{i}}" class="text-xl leading-relaxed font-serif opacity-70 transition-all duration-300">\${{origParas[i] || ""}}</div>
-                            <div id="trans-\${{p.id}}-\${{i}}" class="text-2xl leading-relaxed font-serif transition-all duration-300">\${{transPara}}</div>
+                            <div id="orig-${{p.id}}-${{i}}" class="text-xl leading-relaxed font-serif opacity-70 transition-all duration-300">${{origParas[i] || ""}}</div>
+                            <div id="trans-${{p.id}}-${{i}}" class="text-2xl leading-relaxed font-serif transition-all duration-300">${{transPara}}</div>
                         </div>
-                    \`;
+                    `;
                 }}).join('');
 
-                return \`
-                    <div class="group/row border-b border-ink/5 pt-12 pb-12 transition-all first:pt-0" id="section-\${{p.id}}">
+                return `
+                    <div class="group/row border-b border-ink/5 pt-12 pb-12 transition-all first:pt-0" id="section-${{p.id}}">
                         <div class="flex items-center gap-4 mb-8">
-                            <span class="text-[10px] uppercase tracking-[2px] font-bold text-muted border-b border-accent/30 pb-1">\${{speakers}}</span>
-                            <button onclick="playPara(\${{p.id}})" class="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center hover:bg-accent hover:text-paper transition-all">
+                            <span class="text-[10px] uppercase tracking-[2px] font-bold text-muted border-b border-accent/30 pb-1">${{speakers}}</span>
+                            <button onclick="playPara(${{p.id}})" class="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center hover:bg-accent hover:text-paper transition-all">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                             </button>
                         </div>
-                        <div id="trans-\${{p.id}}" onclick="playPara(\${{p.id}})" class="cursor-pointer">
-                            \${{alignedContent}}
+                        <div id="trans-${{p.id}}" onclick="playPara(${{p.id}})" class="cursor-pointer">
+                            ${{alignedContent}}
                         </div>
                     </div>
-                \`;
+                `;
             }}).join('');
 
-            document.getElementById('vocabList').innerHTML = metadata.difficultWords.map(dw => \`
+            document.getElementById('vocabList').innerHTML = metadata.difficultWords.map(dw => `
                 <div class="group border-b border-ink/5 pb-6 last:border-0 hover:translate-x-1 transition-transform">
-                    <p class="text-2xl font-serif font-bold mb-2">\${{dw.word}}</p>
-                    <p class="text-sm text-ink/70 font-serif italic leading-relaxed">\${{dw.explanation}}</p>
+                    <p class="text-2xl font-serif font-bold mb-2">${{dw.word}}</p>
+                    <p class="text-sm text-ink/70 font-serif italic leading-relaxed">${{dw.explanation}}</p>
                 </div>
-            \`).join('');
+            `).join('');
 
-            document.getElementById('castList').innerHTML = metadata.characters.map(char => \`
+            document.getElementById('castList').innerHTML = metadata.characters.map(char => `
                 <div class="flex gap-6">
                     <div class="w-12 h-12 bg-paper border border-ink/10 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A5A40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
                     </div>
                     <div>
-                        <p class="text-xl font-serif font-bold mb-1">\${{char.name}}</p>
-                        <p class="text-xs text-ink/60 font-serif italic leading-relaxed mb-3">\${{char.description}}</p>
+                        <p class="text-xl font-serif font-bold mb-1">${{char.name}}</p>
+                        <p class="text-xs text-ink/60 font-serif italic leading-relaxed mb-3">${{char.description}}</p>
                         <div class="flex flex-wrap gap-2">
-                            <span class="text-[9px] uppercase tracking-[2px] font-bold px-3 py-1 bg-accent text-paper rounded-full">Voice • \${{char.voice}}</span>
-                            <span class="text-[9px] uppercase tracking-[1px] font-bold px-3 py-1 bg-ink/5 text-ink/70 rounded-full italic hover:bg-ink/10 transition-colors cursor-default">\${{char.voiceProfile}}</span>
+                            <span class="text-[9px] uppercase tracking-[2px] font-bold px-3 py-1 bg-accent text-paper rounded-full">Voice • ${{char.voice}}</span>
+                            <span class="text-[9px] uppercase tracking-[1px] font-bold px-3 py-1 bg-ink/5 text-ink/70 rounded-full italic hover:bg-ink/10 transition-colors cursor-default">${{char.voiceProfile}}</span>
                         </div>
                     </div>
                 </div>
-            \`).join('');
+            `).join('');
         }}
 
         drawerToggle.onclick = () => {{
@@ -290,7 +290,7 @@ def generate_html(metadata: StoryMetadata, audio_chunks: dict, source_lang: str,
                     section.querySelectorAll('[id^="orig-"]').forEach(el => el.classList.remove('opacity-40'));
                     section.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
                 }}
-                statusEl.innerText = \`{t['chapter']} \` + currentId;
+                statusEl.innerText = `{t['chapter']} ` + currentId;
             }}
             playBtn.innerHTML = isPlaying ? PAUSE_SVG : PLAY_SVG;
             
