@@ -15,14 +15,20 @@ class GeminiAPI:
                       is_first: bool, full_metadata: StoryMetadata, chunk_index: int, total_chunks: int) -> dict:
         
         context_prompt = ""
-        if not is_first:
+        if not is_first or full_metadata["characters"]:
             char_names = ", ".join([c["name"] for c in full_metadata["characters"]])
             vocab_words = ", ".join([w["word"] for w in full_metadata["difficultWords"]])
-            context_prompt = f"""
-CONTEXT FROM PREVIOUS PARTS:
-- Title: {full_metadata['title']}
-- Known Characters: {char_names}
-- Vocabulary already in dictionary: {vocab_words}
+            
+            # Build known context
+            context_items = []
+            if full_metadata['title']:
+                context_items.append(f"- Title: {full_metadata['title']}")
+            if char_names:
+                context_items.append(f"- Known Characters: {char_names}")
+            if vocab_words:
+                context_items.append(f"- Vocabulary already in dictionary: {vocab_words}")
+            
+            context_prompt = "\nCONTEXT FROM PREVIOUS PARTS:\n" + "\n".join(context_items) + f"""
 
 CRITICAL: 
 - Continue the story exactly from where the previous part left off.
@@ -49,7 +55,9 @@ Tasks for this chunk:
    The goal is to maintain a high-quality "audiobook" experience while minimizing the number of audio requests.
    Segments should ideally be between 15 and 120 seconds of spoken audio length.
 2. Identify every speaking character. If you encounter NEW characters, provide a short description and voiceProfile.
-   Assign a voice name from this list: Male: 'Puck', 'Charon', 'Fenrir'. Female / children: 'Zephyr', 'Kore', 'Sulafat', 'Erinome'.
+   Assign a voice name from this list: 
+   - Male/Firm/Deep: 'Puck', 'Charon', 'Kore', 'Fenrir', 'Orus', 'Algenib', 'Rasalgethi', 'Alnilam', 'Iapetus', 'Schedar'
+   - Female/Bright/Soft: 'Zephyr', 'Aoede', 'Leda', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Despina', 'Erinome', 'Sulafat', 'Pulcherrima'
 3. For each paragraph/segment, provide a list of "turns". A turn is a piece of text spoken by a specific speaker. Narration counts as "Narrator".
 4. Extract key vocabulary words from the TRANSLATED text ({target_lang}), explaining them in {source_lang}.
    IMPORTANT (Proficiency Level: {level}): 

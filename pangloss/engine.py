@@ -74,3 +74,10 @@ class CacheEngine:
             if path:
                 paths.append(str(path))
         return paths
+
+    def load_other_metadata(self, other_job_id: str) -> Optional[dict]:
+        path = self.cache_root / other_job_id / "metadata.json"
+        if path.exists():
+            with open(path, "r") as f:
+                return json.load(f)
+        return None

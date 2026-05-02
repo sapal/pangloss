@@ -56,6 +56,15 @@ def run_build(args):
                 "difficultWords": [],
                 "paragraphs": []
             }
+
+            # Import characters if requested
+            if args.import_characters:
+                other_meta = engine.load_other_metadata(args.import_characters)
+                if other_meta:
+                    print(f"Importing characters from project {args.import_characters}...")
+                    full_metadata["characters"] = other_meta.get("characters", [])
+                else:
+                    print(f"Warning: Could not find project {args.import_characters} to import characters.")
             
             for i, chunk in enumerate(chunks):
                 print(f"Processing chunk {i+1}/{len(chunks)}...")
@@ -120,6 +129,8 @@ def run_build(args):
     # 4. Serve if requested
     if args.serve:
         serve_output(args.output_dir, html_file)
+    
+    print(f"\nFinal Job ID: {engine.job_id}")
 
 def serve_output(directory, html_file):
     os.chdir(directory)
@@ -145,6 +156,7 @@ def main():
     build_parser.add_argument("--level", default="B1", help="Proficiency level (default: B1)")
     build_parser.add_argument("--output-dir", default="./pangloss_output", help="Output directory (default: ./pangloss_output)")
     build_parser.add_argument("--render-only", help="Skip API calls; force generation from existing cache job ID")
+    build_parser.add_argument("--import-characters", help="Import character names and voices from a previous Job ID")
     build_parser.add_argument("--serve", action="store_true", help="Spin up a local server to preview")
     
     args = parser.parse_args()
