@@ -1,0 +1,169 @@
+{
+  "title": "Die Quanten-Teekanne",
+  "characters": [
+    {
+      "name": "Narrator",
+      "description": "The unseen teller of the story.",
+      "voice": "Fenrir",
+      "voiceProfile": "Calm, steady, and clear."
+    },
+    {
+      "name": "Arthur",
+      "description": "A man who is surprised by a strange phenomenon in London.",
+      "voice": "Puck",
+      "voiceProfile": "Curious and slightly anxious."
+    },
+    {
+      "name": "Elara",
+      "description": "A woman who seems unbothered by the magical teapot.",
+      "voice": "Zephyr",
+      "voiceProfile": "Cheerful and nonchalant."
+    }
+  ],
+  "difficultWords": [
+    {
+      "word": "der Morgen",
+      "explanation": "The time of day between sunrise and noon.",
+      "anchors": [
+        "Morgen"
+      ]
+    },
+    {
+      "word": "die Entdeckung",
+      "explanation": "The act of finding something new or hidden.",
+      "anchors": [
+        "Entdeckung"
+      ]
+    },
+    {
+      "word": "das Gef\u00e4\u00df",
+      "explanation": "A container like a bowl or a pot.",
+      "anchors": [
+        "Keramikgef\u00e4\u00df"
+      ]
+    },
+    {
+      "word": "die Teekanne",
+      "explanation": "A pot with a handle and spout for making and serving tea.",
+      "anchors": [
+        "Teekanne"
+      ]
+    },
+    {
+      "word": "der Zucker",
+      "explanation": "A sweet substance used to flavor food and drinks.",
+      "anchors": [
+        "Zucker"
+      ]
+    },
+    {
+      "word": "buchst\u00e4blich",
+      "explanation": "Exactly as described; in a literal sense.",
+      "anchors": [
+        "buchst\u00e4blich"
+      ]
+    },
+    {
+      "word": "schweben",
+      "explanation": "To hover or stay in the air without falling.",
+      "anchors": [
+        "schwebt"
+      ]
+    },
+    {
+      "word": "leuchten",
+      "explanation": "To give off or reflect light; to shine.",
+      "anchors": [
+        "leuchtet"
+      ]
+    },
+    {
+      "word": "z\u00f6gern",
+      "explanation": "To wait or be slow to act because of uncertainty.",
+      "anchors": [
+        "z\u00f6gerte"
+      ]
+    },
+    {
+      "word": "das Detail",
+      "explanation": "A small individual part or item of something.",
+      "anchors": [
+        "Detail"
+      ]
+    },
+    {
+      "word": "unm\u00f6glich",
+      "explanation": "Not able to occur, exist, or be done.",
+      "anchors": [
+        "Unm\u00f6gliches"
+      ]
+    }
+  ],
+  "paragraphs": [
+    {
+      "id": 1,
+      "originalText": "# The Quantum Teapot\n\nIt was a cold morning in London, but Arthur didn't mind. He was looking at something **impossible**.",
+      "translatedText": "# Die Quanten-Teekanne\n\nEs war ein kalter Morgen in London, aber Arthur machte das nichts aus. Er sah sich etwas **Unm\u00f6gliches** an.",
+      "turns": [
+        {
+          "speaker": "Narrator",
+          "text": "Die Quanten-Teekanne"
+        },
+        {
+          "speaker": "Narrator",
+          "text": "Es war ein kalter Morgen in London, aber Arthur machte das nichts aus. Er sah sich etwas Unm\u00f6gliches an."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "originalText": "## The Discovery\n\n\"Pass me the sugar, would you?\" asked *Elara*, her eyes fixed on the ceramic vessel.\n\nArthur hesitated. \"It's floating, Elara. The teapot is literally hovering six inches above the table.\"",
+      "translatedText": "## Die Entdeckung\n\n\"Gib mir bitte den Zucker, ja?\", fragte *Elara*, w\u00e4hrend ihre Augen auf das Keramikgef\u00e4\u00df gerichtet waren.\n\nArthur z\u00f6gerte. \"Sie schwebt, Elara. Die Teekanne schwebt buchst\u00e4blich f\u00fcnfzehn Zentimeter \u00fcber dem Tisch.\"",
+      "turns": [
+        {
+          "speaker": "Narrator",
+          "text": "Die Entdeckung"
+        },
+        {
+          "speaker": "Elara",
+          "text": "Gib mir bitte den Zucker, ja?"
+        },
+        {
+          "speaker": "Narrator",
+          "text": "fragte Elara, w\u00e4hrend ihre Augen auf das Keramikgef\u00e4\u00df gerichtet waren."
+        },
+        {
+          "speaker": "Narrator",
+          "text": "Arthur z\u00f6gerte."
+        },
+        {
+          "speaker": "Arthur",
+          "text": "Sie schwebt, Elara. Die Teekanne schwebt buchst\u00e4blich f\u00fcnfzehn Zentimeter \u00fcber dem Tisch."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "originalText": "Elara laughed. \"Minor detail! In the best of all possible worlds, tea serves itself.\"\n\n**\"But it's glowing blue!\"** Arthur insisted.",
+      "translatedText": "Elara lachte. \"Ein kleines Detail! In der besten aller m\u00f6glichen Welten serviert sich der Tee von selbst.\"\n\n**\"Aber sie leuchtet blau!\"**, betonte Arthur.",
+      "turns": [
+        {
+          "speaker": "Narrator",
+          "text": "Elara lachte."
+        },
+        {
+          "speaker": "Elara",
+          "text": "Ein kleines Detail! In der besten aller m\u00f6glichen Welten serviert sich der Tee von selbst."
+        },
+        {
+          "speaker": "Arthur",
+          "text": "Aber sie leuchtet blau!"
+        },
+        {
+          "speaker": "Narrator",
+          "text": "betonte Arthur."
+        }
+      ]
+    }
+  ]
+}
