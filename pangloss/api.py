@@ -101,13 +101,14 @@ CHUNK TO PROCESS:
     @retry_with_pangloss()
     def generate_tts(self, paragraph: ProcessedParagraph, characters: List[Character]) -> bytes:
         char_profiles = "\n".join([f"- {c['name']}: {c['voiceProfile']} (Voice: {c['voice']})" for c in characters])
-        script = "\n".join([f"{t['speaker']}: {t['text']}" for t in paragraph["turns"]])
+        script = "\n".join([f"[{t['speaker']}] {t['text']}" for t in paragraph["turns"]])
 
         prompt = f"""
 Perform the following script in audio. 
 Use the provided character profiles to guide your vocal performance for each speaker.
 It is crucial that you switch voices and tones appropriately between characters.
 The 'Narrator' role is an important part of the script - make sure you read it out loud as well.
+The character saying the role is specified in [square brackets].
 
 CHARACTER PROFILES:
 {char_profiles}
