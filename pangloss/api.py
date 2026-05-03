@@ -54,11 +54,11 @@ Tasks for this chunk:
    IMPORTANT: The 'originalText' and 'translatedText' within each segment MUST have the exact same number of paragraphs (separated by \\n\\n) so they can be perfectly aligned in the UI.
    The goal is to maintain a high-quality "audiobook" experience while minimizing the number of audio requests.
    Segments should ideally be between 15 and 120 seconds of spoken audio length.
-2. Identify every speaking character. If you encounter NEW characters, provide a short description and voiceProfile.
+2. Identify every speaking character. You MUST include a "Narrator" character for non-dialogue text. If you encounter NEW characters (including the Narrator if this is the first chunk), provide a short description and voiceProfile.
    Assign a voice name from this list: 
    - Male/Firm/Deep: 'Puck', 'Charon', 'Kore', 'Fenrir', 'Orus', 'Algenib', 'Rasalgethi', 'Alnilam', 'Iapetus', 'Schedar'
    - Female/Bright/Soft: 'Zephyr', 'Aoede', 'Leda', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Despina', 'Erinome', 'Sulafat', 'Pulcherrima'
-3. For each paragraph/segment, provide a list of "turns". A turn is a piece of text spoken by a specific speaker. Narration counts as "Narrator".
+3. For each paragraph/segment, provide a list of "turns". A turn is a piece of text spoken by a specific speaker. Narration MUST be assigned to the character "Narrator".
 4. Extract key vocabulary words from the TRANSLATED text ({target_lang}), explaining them in {source_lang}.
    IMPORTANT (Proficiency Level: {level}): 
    - If level is A1 or A2, include even relatively simple/common words in the lexicon. 
@@ -120,9 +120,10 @@ SCRIPT:
         if len(speakers) == 2:
             speaker_configs = []
             for s in speakers:
-                char = next((c for c in characters if c["name"] == s), None)
+                # Find character by name (case-insensitive)
+                char = next((c for c in characters if c["name"].lower() == s.lower()), None)
                 if not char:
-                    # Fallback for characters not in metadata (e.g. Narrator)
+                    # Fallback to Narrator if specific character not found
                     char = next((c for c in characters if c["name"].lower() == "narrator"), characters[0])
                 
                 speaker_configs.append(types.SpeakerVoiceConfig(
@@ -138,8 +139,9 @@ SCRIPT:
             )
         else:
             # Fallback for 1 or 3+ speakers
+            # Use Narrator if present, otherwise the first available speaker
             primary_speaker = next((s for s in speakers if s.lower() == "narrator"), speakers[0])
-            char = next((c for c in characters if c["name"] == primary_speaker), characters[0])
+            char = next((c for c in characters if c["name"].lower() == primary_speaker.lower()), characters[0])
             speech_config = types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=char["voice"])
