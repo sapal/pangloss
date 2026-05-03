@@ -21,8 +21,13 @@ class Character(TypedDict):
     voice: str
     voiceProfile: str
 
+class ProcessedChunkRange(TypedDict):
+    start: int
+    end: int
+
 class StoryMetadata(TypedDict):
     title: str
     characters: List[Character]
     difficultWords: List[DifficultWord]
     paragraphs: List[ProcessedParagraph]
+    processed_chunks: List[ProcessedChunkRange]

@@ -10,24 +10,45 @@ from .audio import pcm_to_wav
 from .export import export_results
 from .utils import log_pangloss
 
-def chunk_text(text: str, words_per_chunk: int = 2000) -> list[str]:
+def chunk_text(text: str, words_per_chunk: int = 2000) -> list[dict]:
     # Split by paragraph boundaries (double newlines)
-    raw_paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    # We want to keep track of indices, so we split and then find the positions
+    paragraphs = text.split("\n\n")
     chunks = []
-    current_chunk = []
+    current_chunk_paragraphs = []
     current_word_count = 0
+    current_start_index = 0
     
-    for p in raw_paragraphs:
+    char_ptr = 0
+    for i, p in enumerate(paragraphs):
         word_count = len(p.split())
-        if current_word_count + word_count > words_per_chunk and current_chunk:
-            chunks.append("\n\n".join(current_chunk))
-            current_chunk = []
+        
+        # Calculate current end index for this paragraph
+        # Need to account for the \n\n if not the last one
+        p_len = len(p)
+        
+        if current_word_count + word_count > words_per_chunk and current_chunk_paragraphs:
+            chunk_text_str = "\n\n".join(current_chunk_paragraphs)
+            chunks.append({
+                "text": chunk_text_str,
+                "start": current_start_index,
+                "end": char_ptr - 2 # Exclude the trailing \n\n
+            })
+            current_chunk_paragraphs = []
             current_word_count = 0
-        current_chunk.append(p)
+            current_start_index = char_ptr
+        
+        current_chunk_paragraphs.append(p)
         current_word_count += word_count
+        char_ptr += p_len + 2 # Length of paragraph plus \n\n
     
-    if current_chunk:
-        chunks.append("\n\n".join(current_chunk))
+    if current_chunk_paragraphs:
+        chunk_text_str = "\n\n".join(current_chunk_paragraphs)
+        chunks.append({
+            "text": chunk_text_str,
+            "start": current_start_index,
+            "end": len(text)
+        })
     return chunks
 
 def run_build(args):
@@ -44,17 +65,19 @@ def run_build(args):
             sys.exit(1)
         api = GeminiAPI(api_key)
 
+        with open(args.filepath, "r", encoding="utf-8") as f:
+            text = f.read()
+        
+        all_chunks = chunk_text(text)
+        
         if not metadata:
-            print("Processing text and generating metadata...")
-            with open(args.filepath, "r", encoding="utf-8") as f:
-                text = f.read()
-            
-            chunks = chunk_text(text)
-            full_metadata = {
+            print("Initializing new project metadata...")
+            metadata = {
                 "title": "",
                 "characters": [],
                 "difficultWords": [],
-                "paragraphs": []
+                "paragraphs": [],
+                "processed_chunks": []
             }
 
             # Import characters if requested
@@ -62,40 +85,58 @@ def run_build(args):
                 other_meta = engine.load_other_metadata(args.import_characters)
                 if other_meta:
                     print(f"Importing characters from project {args.import_characters}...")
-                    full_metadata["characters"] = other_meta.get("characters", [])
+                    metadata["characters"] = other_meta.get("characters", [])
                 else:
                     print(f"Warning: Could not find project {args.import_characters} to import characters.")
+        
+        processed_starts = [c["start"] for c in metadata.get("processed_chunks", [])]
+        
+        # Check if all chunks are processed
+        chunks_to_process = [c for c in all_chunks if c["start"] not in processed_starts]
+        
+        if chunks_to_process:
+            print(f"Processing {len(chunks_to_process)} missing text chunks...")
             
-            for i, chunk in enumerate(chunks):
-                print(f"Processing chunk {i+1}/{len(chunks)}...")
+            for i, chunk_info in enumerate(all_chunks):
+                if chunk_info["start"] in processed_starts:
+                    print(f"Skipping already processed chunk {i+1}/{len(all_chunks)}...")
+                    continue
+                
+                print(f"Processing chunk {i+1}/{len(all_chunks)}...")
                 chunk_data = api.process_chunk(
-                    chunk, args.target_lang, args.level, args.source_lang, 
-                    i == 0, full_metadata, i, len(chunks)
+                    chunk_info["text"], args.target_lang, args.level, args.source_lang, 
+                    i == 0 and not metadata["processed_chunks"], metadata, i, len(all_chunks)
                 )
                 
-                if i == 0:
-                    full_metadata["title"] = chunk_data.get("title", "Untitled")
+                if not metadata["title"]:
+                    metadata["title"] = chunk_data.get("title", "Untitled")
                 
                 # Merge characters
                 for new_char in chunk_data.get("characters", []):
-                    if not any(c["name"].lower() == new_char["name"].lower() for c in full_metadata["characters"]):
-                        full_metadata["characters"].append(new_char)
+                    if not any(c["name"].lower() == new_char["name"].lower() for c in metadata["characters"]):
+                        metadata["characters"].append(new_char)
                 
                 # Merge words
                 for new_word in chunk_data.get("difficultWords", []):
-                    if not any(w["word"].lower() == new_word["word"].lower() for w in full_metadata["difficultWords"]):
-                        full_metadata["difficultWords"].append(new_word)
+                    if not any(w["word"].lower() == new_word["word"].lower() for w in metadata["difficultWords"]):
+                        metadata["difficultWords"].append(new_word)
                 
                 # Merge paragraphs (re-indexing)
-                base_id = max([p["id"] for p in full_metadata["paragraphs"]] + [0])
+                base_id = max([p["id"] for p in metadata["paragraphs"]] + [0])
                 for j, p in enumerate(chunk_data.get("paragraphs", [])):
                     p["id"] = base_id + j + 1
-                    full_metadata["paragraphs"].append(p)
+                    metadata["paragraphs"].append(p)
+                
+                # Mark as processed
+                metadata["processed_chunks"].append({
+                    "start": chunk_info["start"],
+                    "end": chunk_info["end"]
+                })
                 
                 # Intermediate save
-                engine.save_metadata(full_metadata)
-            
-            metadata = full_metadata
+                engine.save_metadata(metadata)
+        else:
+            print("All text chunks already processed.")
 
         # 2. Generate Audio Chunks
         print("Generating audio chunks...")

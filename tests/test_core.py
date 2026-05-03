@@ -11,8 +11,12 @@ def test_chunk_text():
     text = "Para 1\n\nPara 2\n\nPara 3"
     chunks = chunk_text(text, words_per_chunk=4)
     assert len(chunks) == 2
-    assert chunks[0] == "Para 1\n\nPara 2"
-    assert chunks[1] == "Para 3"
+    assert chunks[0]["text"] == "Para 1\n\nPara 2"
+    assert chunks[0]["start"] == 0
+    assert chunks[0]["end"] == 14
+    assert chunks[1]["text"] == "Para 3"
+    assert chunks[1]["start"] == 16
+    assert chunks[1]["end"] == 22
 
 def test_job_id_consistency():
     # Create a dummy file
