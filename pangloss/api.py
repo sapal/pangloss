@@ -107,6 +107,7 @@ CHUNK TO PROCESS:
 Perform the following script in audio. 
 Use the provided character profiles to guide your vocal performance for each speaker.
 It is crucial that you switch voices and tones appropriately between characters.
+The 'Narrator' role is an important part of the script - make sure you read it out loud as well.
 
 CHARACTER PROFILES:
 {char_profiles}
