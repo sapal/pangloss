@@ -58,13 +58,13 @@ Tasks for this chunk:
    Assign a voice name from this list: 
    - Male/Firm/Deep: 'Puck', 'Charon', 'Kore', 'Fenrir', 'Orus', 'Algenib', 'Rasalgethi', 'Alnilam', 'Iapetus', 'Schedar'
    - Female/Bright/Soft: 'Zephyr', 'Aoede', 'Leda', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Despina', 'Erinome', 'Sulafat', 'Pulcherrima'
-3. For each paragraph/segment, provide a list of "turns". A turn is a piece of text spoken by a specific speaker. Narration MUST be assigned to the character "Narrator".
+3. For each paragraph/segment, provide a list of "turns". A turn is a piece of text spoken by a specific speaker. Narration (even narration between parts of sentence spoken by a character) MUST be assigned to the character "Narrator". Concatenating the text of turns MUST give exactly the translated text.
 4. Extract key vocabulary words from the TRANSLATED text ({target_lang}), explaining them in {source_lang}.
    IMPORTANT (Proficiency Level: {level}): 
    - If level is A1 or A2, include even relatively simple/common words in the lexicon. 
    - If the target language is German, all NOUNS in the difficultWords list MUST include their definite article (der, die, das) in the "word" field.
    - For this chunk, you MUST provide at least 10 NEW words not mentioned in the context (for all profficiency levels).
-5. Provide an "anchors" array for each difficult word.
+5. Provide an "anchors" array for each difficult word. "Anchor" is a version of the word (e.g. conjugated differently or without the article) which occurs in translated text and should be linked to the explanation.
 {f'6. The FIRST LINE of the provided text is the title. Extract it, translate it, and use it as the "title". The title must be the first element in the "turns" of the first paragraph.' if is_first else f'6. Use "{full_metadata["title"]}" as the title.'}
 
 Return exactly this JSON format:
@@ -100,7 +100,10 @@ CHUNK TO PROCESS:
 
     @retry_with_pangloss()
     def generate_tts(self, paragraph: ProcessedParagraph, characters: List[Character]) -> bytes:
-        char_profiles = "\n".join([f"- {c['name']}: {c['voiceProfile']} (Voice: {c['voice']})" for c in characters])
+        used_characters = set(t['speaker'] for t in paragraph["turns"])
+        char_profiles = "\n".join([f"- {c['name']}: {c['voiceProfile']} (Voice: {c['voice']})"
+                                   for c in characters
+                                   if c['name'] in used_characters])
         script = "\n".join([f"[{t['speaker']}] {t['text']}" for t in paragraph["turns"]])
 
         prompt = f"""
