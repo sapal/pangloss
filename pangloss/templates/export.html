@@ -200,6 +200,8 @@
                     </div>
                 </div>
             `).join('');
+
+            document.querySelectorAll('[id^="section-"]').forEach(el => observer.observe(el));
         }
 
         drawerToggle.onclick = () => {
@@ -222,7 +224,20 @@
             updateUI();
         }
 
-        function updateUI() {
+        const observer = new IntersectionObserver((entries) => {
+            if (isPlaying) return;
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const id = parseInt(entry.target.id.replace('section-', ''));
+                    if (currentId !== id) {
+                        currentId = id;
+                        updateUI(false);
+                    }
+                }
+            });
+        }, { threshold: 0.5 });
+
+        function updateUI(autoScroll = true) {
             document.querySelectorAll('[id^="section-"]').forEach(el => {
                 el.classList.remove('bg-accent/5', 'ring-1', 'ring-accent/10', 'shadow-sm', 'p-8', '-mx-8', 'rounded-2xl');
             });
@@ -233,9 +248,14 @@
                 if (section) {
                     section.classList.add('bg-accent/5', 'ring-1', 'ring-accent/10', 'shadow-sm', 'p-8', '-mx-8', 'rounded-2xl');
                     section.querySelectorAll('[id^="orig-"]').forEach(el => el.classList.remove('opacity-40'));
-                    section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    if (autoScroll) {
+                        section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
                 }
                 statusEl.innerText = `${chapter_label} ` + currentId;
+                if (window.location.hash !== '#section-' + currentId) {
+                    history.replaceState(null, null, '#section-' + currentId);
+                }
             }
             playBtn.innerHTML = isPlaying ? PAUSE_SVG : PLAY_SVG;
             
@@ -284,7 +304,12 @@
 
         window.addEventListener('load', () => {
           render();
-          updateUI();
+          const hash = window.location.hash;
+          if (hash.startsWith('#section-')) {
+              const id = parseInt(hash.replace('#section-', ''));
+              if (!isNaN(id)) currentId = id;
+          }
+          updateUI(true);
         });
         // Initial render for immediate visibility
         render();
