@@ -142,11 +142,12 @@ def run_build(args):
         print("Generating audio chunks...")
         cached_audio_ids = engine.list_cached_audio()
         
-        for p in metadata["paragraphs"]:
+        total_paras = len(metadata["paragraphs"])
+        for idx, p in enumerate(metadata["paragraphs"], 1):
             if p["id"] in cached_audio_ids:
                 continue
             
-            print(f"Generating audio for paragraph {p['id']}...")
+            print(f"Generating audio for paragraph {idx}/{total_paras}...")
             try:
                 pcm_data = api.generate_tts(p, metadata["characters"])
                 wav_data = pcm_to_wav(pcm_data)
