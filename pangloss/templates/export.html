@@ -14,7 +14,7 @@
             --muted: #8C8A81;
             --highlight: rgba(90, 90, 64, 0.1);
         }
-        body { background-color: var(--paper); color: var(--ink); font-family: 'Lora', Georgia, serif; -webkit-font-smoothing: antialiased; }
+        body { background-color: var(--paper); color: var(--ink); font-family: 'Lora', Georgia, serif; -webkit-font-smoothing: antialiased; height: 100vh; height: 100dvh; display: flex; overflow: hidden; margin: 0; }
         .font-sans { font-family: 'Helvetica Neue', Arial, sans-serif; }
         .text-accent { color: var(--accent); }
         .text-muted { color: var(--muted); }
@@ -38,18 +38,208 @@
         .text-content hr { border-top: 2px solid rgba(90, 90, 64, 0.1); margin: 2.5rem 0; }
         .text-content strong { font-weight: 800; }
         .text-content em { font-style: italic; }
+
+        /* redone layout styles */
+        #scrollContainer {
+            flex: 1;
+            overflow-y: auto;
+            min-width: 0;
+        }
+
+        #permanentControls {
+            display: flex;
+            background-color: var(--ink);
+            color: var(--paper);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Default (Mobile Portrait) layout */
+        @media (max-width: 767px) and (orientation: portrait) {
+            body {
+                flex-direction: column !important;
+            }
+            #scrollContainer {
+                height: 0;
+                flex-grow: 1 !important;
+            }
+            #permanentControls {
+                flex-direction: row !important;
+                width: 100% !important;
+                height: 76px !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                padding: 0 16px !important;
+                border-top-width: 1px !important;
+            }
+            #playerButtonsContainer {
+                flex-direction: row !important;
+                justify-content: flex-end !important;
+                gap: 12px !important;
+                flex: 1 !important;
+            }
+            #navButtonsContainer {
+                flex-direction: row !important;
+                gap: 12px !important;
+                align-items: center !important;
+            }
+            #dictionaryContainer {
+                order: -1;
+            }
+            .dict-label {
+                display: inline !important;
+            }
+            #prevBtn .label-text, #nextBtn .label-text {
+                display: none !important;
+            }
+            #prevBtn::before {
+                content: '';
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                border-top: 2px solid currentColor;
+                border-left: 2px solid currentColor;
+                transform: rotate(-45deg);
+                margin-right: -2px;
+            }
+            #nextBtn::after {
+                content: '';
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                border-bottom: 2px solid currentColor;
+                border-right: 2px solid currentColor;
+                transform: rotate(-45deg);
+                margin-left: -2px;
+            }
+            #playToggle {
+                width: 44px !important;
+                height: 44px !important;
+                order: 2;
+            }
+            #playToggle svg {
+                width: 18px !important;
+                height: 18px !important;
+            }
+        }
+
+        /* Desktop and Mobile Landscape common sidebar layout */
+        @media (min-width: 768px), (orientation: landscape) {
+            body {
+                flex-direction: row !important;
+            }
+            #scrollContainer {
+                height: 100% !important;
+            }
+            #permanentControls {
+                flex-direction: column !important;
+                height: 100vh !important;
+                height: 100dvh !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                border-left-width: 1px !important;
+                flex-shrink: 0 !important;
+            }
+            #playerButtonsContainer {
+                flex-direction: column !important;
+                gap: 24px !important;
+                flex: 1 !important;
+                justify-content: center !important;
+                align-items: center !important;
+            }
+        }
+
+        /* Desktop specific sidebar style */
+        @media (min-width: 768px) {
+            #permanentControls {
+                width: 280px !important;
+                padding: 40px 24px !important;
+            }
+            #dictionaryContainer {
+                width: 100% !important;
+            }
+            #drawerToggle {
+                width: 100% !important;
+                justify-content: center !important;
+                padding: 12px !important;
+            }
+            #navButtonsContainer {
+                flex-direction: row !important;
+                gap: 20px !important;
+                align-items: center !important;
+            }
+            #prevBtn .label-text, #nextBtn .label-text {
+                display: inline !important;
+            }
+            #playToggle {
+                width: 60px !important;
+                height: 60px !important;
+            }
+        }
+
+        /* Mobile Landscape specific sidebar style */
+        @media (max-width: 960px) and (orientation: landscape) {
+            #permanentControls {
+                width: 76px !important;
+                padding: 24px 8px !important;
+            }
+            #playerButtonsContainer {
+                gap: 16px !important;
+            }
+            #navButtonsContainer {
+                flex-direction: column !important;
+                gap: 16px !important;
+                align-items: center !important;
+            }
+            #prevBtn .label-text, #nextBtn .label-text, .dict-label {
+                display: none !important;
+            }
+            #drawerToggle {
+                padding: 10px !important;
+                border-radius: 50% !important;
+            }
+            #playToggle {
+                width: 44px !important;
+                height: 44px !important;
+            }
+            #playToggle svg {
+                width: 18px !important;
+                height: 18px !important;
+            }
+            #prevBtn::before {
+                content: '';
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                border-top: 2px solid currentColor;
+                border-left: 2px solid currentColor;
+                transform: rotate(45deg);
+                margin-bottom: -2px;
+            }
+            #nextBtn::after {
+                content: '';
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                border-bottom: 2px solid currentColor;
+                border-right: 2px solid currentColor;
+                transform: rotate(45deg);
+                margin-top: -2px;
+            }
+            #prevBtn, #nextBtn {
+                width: 32px !important;
+                height: 32px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
+        }
     </style>
 </head>
-<body class="bg-paper text-ink font-serif selection:bg-highlight min-h-screen">
-    <button class="fixed top-10 right-10 border-none bg-transparent font-sans text-[11px] font-bold uppercase tracking-[2px] color-muted cursor-pointer z-50 flex items-center gap-2 hover:text-ink transition-colors" id="drawerToggle">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>
-        ${dictionary_label}
-    </button>
-
+<body class="bg-paper text-ink font-serif selection:bg-highlight">
     <div class="fixed inset-0 bg-black/20 backdrop-blur-sm z-[1999] opacity-0 pointer-events-none transition-opacity duration-300" id="overlay"></div>
     <div class="drawer fixed right-0 top-0 h-full w-full max-w-[450px] bg-[#F4F1EA] z-[2000] p-[60px_40px] border-l border-ink/10 overflow-y-auto shadow-[-20px_0_60px_rgba(0,0,0,0.2)]" id="drawer">
         <div class="flex justify-between items-start mb-16">
-            <h2 class="text-[44px] italic font-bold font-serif">${lexicon_label}</h2>
+            <h2 class="text-3xl md:text-[44px] italic font-bold font-serif">${lexicon_label}</h2>
             <button id="closeDrawer" class="bg-none border-none cursor-pointer opacity-50 p-2 hover:bg-ink/5 rounded-full transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
@@ -66,32 +256,63 @@
         </div>
     </div>
 
-    <div class="max-w-[1400px] mx-auto p-[60px_40px_180px]">
-        <header class="border-b-2 border-ink/5 pb-[30px] mb-[60px]">
-            <h1 class="text-[3.5rem] m-0 italic font-[900] tracking-[-2px] leading-tight mb-4">${title}</h1>
-            <p class="font-sans text-[10px] uppercase tracking-[3px] font-extrabold opacity-60 mt-2 text-accent">Pangloss • Immersive Audiobooks • ${target_lang} ${level}</p>
-        </header>
+    <!-- Scrollable main text area -->
+    <div id="scrollContainer">
+        <div id="mainContainer" class="max-w-[1100px] mx-auto px-6 py-12 md:px-12 md:py-20">
+            <header class="border-b-2 border-ink/5 pb-[30px] mb-[60px]">
+                <h1 class="text-3xl md:text-[3.5rem] m-0 italic font-[900] tracking-[-2px] leading-tight mb-4">${title}</h1>
+                <p class="font-sans text-[10px] uppercase tracking-[3px] font-extrabold opacity-60 mt-2 text-accent">Pangloss • Immersive Audiobooks • ${target_lang} ${level}</p>
+            </header>
 
-        <div id="story" class="space-y-8"></div>
+            <div id="story" class="space-y-8"></div>
+        </div>
     </div>
 
-    <div class="fixed bottom-[50px] left-1/2 -translate-x-1/2 bg-ink text-paper p-[25px_50px] flex items-center justify-center shadow-[0_40px_80px_rgba(0,0,0,0.5)] z-[100] w-[600px] max-w-[90vw]">
-        <div class="flex-1 flex items-center">
+    <!-- Permanent Side/Bottom Control Bar -->
+    <div id="permanentControls" class="shadow-[0_-10px_30px_rgba(0,0,0,0.15)] md:shadow-[-10px_0_30px_rgba(0,0,0,0.15)] select-none">
+        
+        <!-- Section 1: Brand / Status (Desktop only) -->
+        <div class="hidden md:flex flex-col gap-4 w-full border-b border-white/10 pb-6 mb-6">
+            <span class="text-[9px] uppercase tracking-[3px] text-accent font-sans font-bold">Pangloss Reader</span>
             <div class="flex flex-col">
                 <span class="text-[8px] uppercase tracking-[3px] opacity-50 font-sans font-bold">${status_label}</span>
-                <span id="status" class="text-[11px] font-bold uppercase tracking-[2.5px] font-sans border-l-2 border-accent pl-[15px] mt-[6px] min-w-[140px] text-paper">${status_ready_label}</span>
+                <span id="status" class="text-xs font-bold uppercase tracking-[2px] font-sans mt-2 text-paper truncate">${status_ready_label}</span>
             </div>
         </div>
-        <div class="flex-none flex justify-center mx-10">
-            <button class="bg-paper text-ink w-[60px] h-[60px] rounded-full border-none font-bold cursor-pointer flex items-center justify-center transition-transform hover:scale-110" id="playToggle">${play_svg}</button>
-        </div>
-        <div class="flex-1 flex items-center justify-end">
-            <div class="flex items-center gap-[30px]">
-                <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper" id="prevBtn" disabled>${back_label}</button>
-                <div class="w-px h-5 bg-white/10"></div>
-                <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper" id="nextBtn">${next_label}</button>
+
+        <!-- Section 2: Player Controls -->
+        <div id="playerButtonsContainer" class="flex">
+            <!-- Play/Pause Button -->
+            <button class="bg-paper text-ink rounded-full border-none font-bold cursor-pointer flex items-center justify-center transition-transform hover:scale-105" id="playToggle">
+                ${play_svg}
+            </button>
+            
+            <!-- Navigation Button Group -->
+            <div id="navButtonsContainer" class="flex">
+                <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper flex items-center justify-center" id="prevBtn" disabled>
+                    <span class="label-text">${back_label}</span>
+                </button>
+                <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper flex items-center justify-center" id="rewindBtn" title="Rewind 10s">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                        <path d="M3 3v5h5"/>
+                        <text x="12" y="15.5" font-size="7.5" font-family="sans-serif" font-weight="bold" text-anchor="middle" fill="currentColor">10</text>
+                    </svg>
+                </button>
+                <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper flex items-center justify-center" id="nextBtn">
+                    <span class="label-text">${next_label}</span>
+                </button>
             </div>
         </div>
+
+        <!-- Section 3: Dictionary Button -->
+        <div id="dictionaryContainer" class="flex items-center justify-center">
+            <button class="border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2 font-sans text-[10px] font-bold uppercase tracking-[2px] text-paper cursor-pointer flex items-center gap-2 transition-colors rounded" id="drawerToggle">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>
+                <span class="dict-label">${dictionary_label}</span>
+            </button>
+        </div>
+
     </div>
 
     <audio id="player"></audio>
@@ -99,6 +320,7 @@
     <script>
         const metadata = ${metadata_json};
         const audioData = ${audio_data_json};
+        const scrollContainer = document.getElementById('scrollContainer');
         const storyEl = document.getElementById('story');
         const playBtn = document.getElementById('playToggle');
         const statusEl = document.getElementById('status');
@@ -108,6 +330,7 @@
         const drawer = document.getElementById('drawer');
         const overlay = document.getElementById('overlay');
         const drawerToggle = document.getElementById('drawerToggle');
+        const rewindBtn = document.getElementById('rewindBtn');
         const closeDrawer = document.getElementById('closeDrawer');
         
         let currentId = null;
@@ -157,8 +380,8 @@
 
                     return `
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-start mb-8 last:mb-0">
-                            <div id="orig-$${p.id}-$${i}" class="text-xl leading-relaxed font-serif opacity-70 transition-all duration-300 text-content">$${md(origParas[i] || "")}</div>
-                            <div id="trans-$${p.id}-$${i}" class="text-2xl leading-relaxed font-serif transition-all duration-300 text-content">$${md(transPara)}</div>
+                            <div id="orig-$${p.id}-$${i}" class="text-base md:text-xl leading-relaxed font-serif opacity-70 transition-all duration-300 text-content">$${md(origParas[i] || "")}</div>
+                            <div id="trans-$${p.id}-$${i}" class="text-base md:text-xl leading-relaxed font-serif transition-all duration-300 text-content">$${md(transPara)}</div>
                         </div>
                     `;
                 }).join('');
@@ -204,15 +427,46 @@
             document.querySelectorAll('[id^="section-"]').forEach(el => observer.observe(el));
         }
 
-        drawerToggle.onclick = () => {
+        function openDrawer() {
             drawer.classList.add('active');
             overlay.classList.add('opacity-100', 'pointer-events-auto');
-        };
+        }
+
+        if (drawerToggle) drawerToggle.onclick = openDrawer;
 
         closeDrawer.onclick = overlay.onclick = () => {
             drawer.classList.remove('active');
             overlay.classList.remove('opacity-100', 'pointer-events-auto');
         };
+
+        if (rewindBtn) {
+            rewindBtn.onclick = () => {
+                if (player && player.src) {
+                    player.currentTime = Math.max(0, player.currentTime - 10);
+                }
+            };
+        }
+
+        let lastScrollTime = 0;
+        player.addEventListener('timeupdate', () => {
+            if (!isPlaying || currentId === null) return;
+            const section = document.getElementById('section-' + currentId);
+            if (!section || !player.duration) return;
+            
+            const now = Date.now();
+            if (now - lastScrollTime < 800) return;
+            
+            const progress = player.currentTime / player.duration;
+            const rect = section.getBoundingClientRect();
+            const pointY = rect.top + progress * rect.height;
+            
+            const margin = 150; // pixels from top/bottom
+            if (pointY < margin || pointY > scrollContainer.clientHeight - margin) {
+                const targetScrollTop = scrollContainer.scrollTop + pointY - scrollContainer.clientHeight / 2;
+                scrollContainer.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+                lastScrollTime = now;
+            }
+        });
 
         function playPara(id, restart = true) {
             if (restart || player.src !== audioData[id]) {
