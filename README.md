@@ -63,10 +63,25 @@ python3 pangloss.py build my_story.txt --target-lang "French" --serve
 4. **Export:** Once all segments are generated, Pangloss merges the audio and injects everything into a standalone HTML template.
 
 ## Testing
-Run core unit tests to verify the engine:
+
+Ensure your python path includes the current folder:
 ```bash
 export PYTHONPATH=$PYTHONPATH:.
+```
+
+Run the core unit tests (including API token tracking validation):
+```bash
 python3 tests/test_core.py
+```
+
+Run the HTML validity tests to verify the generated template:
+```bash
+python3 tests/test_html_validity.py
+```
+
+Run the resumability and caching tests (requires setting a dummy API key):
+```bash
+GEMINI_API_KEY="dummy" python3 tests/test_resumability.py
 ```
 
 ---

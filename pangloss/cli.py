@@ -167,7 +167,11 @@ def run_build(args):
         args.source_lang, args.target_lang, args.level
     )
 
-    # 4. Serve if requested
+    # 4. Print token usage statistics
+    if not args.render_only:
+        api.print_token_usage_statistics()
+
+    # 5. Serve if requested
     if args.serve:
         serve_output(args.output_dir, html_file)
     

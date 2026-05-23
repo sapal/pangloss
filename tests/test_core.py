@@ -51,8 +51,55 @@ def test_pcm_to_wav():
             assert w.getframerate() == 24000
             assert w.readframes(100) == pcm_data
 
+from unittest.mock import MagicMock, patch
+from pangloss.api import GeminiAPI
+
+def test_token_usage_tracking():
+    with patch('google.genai.Client') as mock_client:
+        api = GeminiAPI(api_key="fake")
+        
+        assert "gemini-3.5-flash" in api.usage
+        assert "gemini-3.1-flash-tts-preview" in api.usage
+        assert api.usage["gemini-3.5-flash"]["input_tokens"] == 0
+        assert api.usage["gemini-3.5-flash"]["output_tokens"] == 0
+        assert api.usage["gemini-3.1-flash-tts-preview"]["input_tokens"] == 0
+        assert api.usage["gemini-3.1-flash-tts-preview"]["output_tokens"] == 0
+        
+        mock_response = MagicMock()
+        mock_response.text = '{"title": "Test Story"}'
+        mock_response.usage_metadata.prompt_token_count = 120
+        mock_response.usage_metadata.candidates_token_count = 350
+        api.client.models.generate_content.return_value = mock_response
+        
+        api.process_chunk("Chunk content", "German", "B1", "English", True, {
+            "title": "", "characters": [], "difficultWords": [], "paragraphs": []
+        }, 0, 1)
+        
+        assert api.usage["gemini-3.5-flash"]["input_tokens"] == 120
+        assert api.usage["gemini-3.5-flash"]["output_tokens"] == 350
+        
+        mock_audio_response = MagicMock()
+        mock_audio_response.usage_metadata.prompt_token_count = 80
+        mock_audio_response.usage_metadata.candidates_token_count = 500
+        mock_part = MagicMock()
+        mock_part.inline_data.data = b"audio"
+        mock_audio_response.candidates = [MagicMock(content=MagicMock(parts=[mock_part]))]
+        api.client.models.generate_content.return_value = mock_audio_response
+        
+        api.generate_tts({
+            "id": 1,
+            "turns": [{"speaker": "Narrator", "text": "Dies ist ein Test"}]
+        }, [{"name": "Narrator", "voice": "Puck", "voiceProfile": "Clear voice"}])
+        
+        assert api.usage["gemini-3.1-flash-tts-preview"]["input_tokens"] == 80
+        assert api.usage["gemini-3.1-flash-tts-preview"]["output_tokens"] == 500
+        
+        # Verify print stats doesn't raise exception
+        api.print_token_usage_statistics()
+
 if __name__ == "__main__":
     test_chunk_text()
     test_job_id_consistency()
     test_pcm_to_wav()
+    test_token_usage_tracking()
     print("All core tests passed!")

@@ -9,6 +9,10 @@ from .utils import retry_with_pangloss
 class GeminiAPI:
     def __init__(self, api_key: str):
         self.client = genai.Client(api_key=api_key)
+        self.usage = {
+            "gemini-3.5-flash": {"input_tokens": 0, "output_tokens": 0},
+            "gemini-3.1-flash-tts-preview": {"input_tokens": 0, "output_tokens": 0}
+        }
 
     @retry_with_pangloss()
     def process_chunk(self, chunk: str, target_lang: str, level: str, source_lang: str, 
@@ -96,6 +100,9 @@ CHUNK TO PROCESS:
                 response_mime_type="application/json",
             )
         )
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            self.usage["gemini-3.5-flash"]["input_tokens"] += getattr(response.usage_metadata, 'prompt_token_count', 0)
+            self.usage["gemini-3.5-flash"]["output_tokens"] += getattr(response.usage_metadata, 'candidates_token_count', 0)
         return json.loads(response.text)
 
     @retry_with_pangloss()
@@ -161,6 +168,9 @@ SCRIPT:
                 speech_config=speech_config,
             )
         )
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            self.usage["gemini-3.1-flash-tts-preview"]["input_tokens"] += getattr(response.usage_metadata, 'prompt_token_count', 0)
+            self.usage["gemini-3.1-flash-tts-preview"]["output_tokens"] += getattr(response.usage_metadata, 'candidates_token_count', 0)
         
         # Extract audio data
         candidate = response.candidates[0]
@@ -169,3 +179,48 @@ SCRIPT:
                 return part.inline_data.data
         
         raise Exception(f"No audio data returned from Gemini TTS. Finish reason: {candidate.finish_reason}")
+
+    def print_token_usage_statistics(self):
+        print("\n" + "="*50)
+        print("GEMINI API TOKEN USAGE & COST STATISTICS")
+        print("="*50)
+        
+        total_cost = 0.0
+        
+        # Define pricing per token
+        PRICING = {
+            "gemini-3.5-flash": {
+                "input": 1.50 / 1_000_000,
+                "output": 9.00 / 1_000_000
+            },
+            "gemini-3.1-flash-tts-preview": {
+                "input": 1.00 / 1_000_000,
+                "output": 20.00 / 1_000_000
+            }
+        }
+        
+        has_usage = False
+        for model_name, counts in self.usage.items():
+            input_tokens = counts["input_tokens"]
+            output_tokens = counts["output_tokens"]
+            if input_tokens == 0 and output_tokens == 0:
+                continue
+                
+            has_usage = True
+            model_pricing = PRICING.get(model_name, {"input": 0.0, "output": 0.0})
+            input_cost = input_tokens * model_pricing["input"]
+            output_cost = output_tokens * model_pricing["output"]
+            model_cost = input_cost + output_cost
+            total_cost += model_cost
+            
+            print(f"Model: {model_name}")
+            print(f"  Input Tokens:  {input_tokens:,} (${input_cost:.6f})")
+            print(f"  Output Tokens: {output_tokens:,} (${output_cost:.6f})")
+            print(f"  Total Cost:    ${model_cost:.6f}")
+            print("-"*50)
+            
+        if not has_usage:
+            print("No token usage in this run (all segments loaded from cache).")
+        else:
+            print(f"TOTAL API COST FOR THIS RUN: ${total_cost:.6f}")
+        print("="*50 + "\n")
