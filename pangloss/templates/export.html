@@ -447,23 +447,78 @@
             };
         }
 
+        function scrollToActiveText(smooth = true, force = false) {
+            if (currentId === null) return false;
+            const p = metadata.paragraphs.find(para => para.id === currentId);
+            if (!p) return false;
+
+            const progress = player.duration ? (player.currentTime / player.duration) : 0;
+            const origParas = p.originalText.split('\n\n');
+            const transParas = p.translatedText.split('\n\n');
+            const maxParas = Math.max(origParas.length, transParas.length);
+
+            // Map overall progress to active sub-paragraph index
+            const totalLen = origParas.reduce((acc, text) => acc + text.length, 0);
+            let cumulativeLen = 0;
+            let activeSubIndex = 0;
+            if (totalLen > 0) {
+                const targetLen = progress * totalLen;
+                for (let i = 0; i < origParas.length; i++) {
+                    cumulativeLen += origParas[i].length;
+                    if (targetLen <= cumulativeLen) {
+                        activeSubIndex = i;
+                        break;
+                    }
+                }
+            }
+            if (activeSubIndex >= maxParas) {
+                activeSubIndex = maxParas - 1;
+            }
+
+            const transEl = document.getElementById(`trans-$${currentId}-$${activeSubIndex}`);
+            if (!transEl) return false;
+
+            // Calculate start/end progress of the active sub-paragraph
+            let startLen = 0;
+            for (let i = 0; i < activeSubIndex; i++) {
+                if (origParas[i]) {
+                    startLen += origParas[i].length;
+                }
+            }
+            const activeParaLen = origParas[activeSubIndex] ? origParas[activeSubIndex].length : 0;
+            const endLen = startLen + activeParaLen;
+            const startProgress = startLen / (totalLen || 1);
+            const endProgress = endLen / (totalLen || 1);
+
+            let subProgress = 0;
+            if (endProgress > startProgress) {
+                subProgress = (progress - startProgress) / (endProgress - startProgress);
+                subProgress = Math.max(0, Math.min(1, subProgress));
+            }
+
+            const rect = transEl.getBoundingClientRect();
+            const containerRect = scrollContainer.getBoundingClientRect();
+            
+            // Calculate position of the read cursor relative to the scroll container
+            const pointY = rect.top - containerRect.top + subProgress * rect.height;
+
+            const margin = 150; // pixels from top/bottom
+            if (force || pointY < margin || pointY > scrollContainer.clientHeight - margin) {
+                const targetScrollTop = scrollContainer.scrollTop + pointY - scrollContainer.clientHeight / 2;
+                scrollContainer.scrollTo({ top: targetScrollTop, behavior: smooth ? 'smooth' : 'auto' });
+                return true;
+            }
+            return false;
+        }
+
         let lastScrollTime = 0;
         player.addEventListener('timeupdate', () => {
             if (!isPlaying || currentId === null) return;
-            const section = document.getElementById('section-' + currentId);
-            if (!section || !player.duration) return;
-            
             const now = Date.now();
             if (now - lastScrollTime < 800) return;
             
-            const progress = player.currentTime / player.duration;
-            const rect = section.getBoundingClientRect();
-            const pointY = rect.top + progress * rect.height;
-            
-            const margin = 150; // pixels from top/bottom
-            if (pointY < margin || pointY > scrollContainer.clientHeight - margin) {
-                const targetScrollTop = scrollContainer.scrollTop + pointY - scrollContainer.clientHeight / 2;
-                scrollContainer.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+            const didScroll = scrollToActiveText(true, false);
+            if (didScroll) {
                 lastScrollTime = now;
             }
         });
@@ -503,7 +558,7 @@
                     section.classList.add('bg-accent/5', 'ring-1', 'ring-accent/10', 'shadow-sm', 'p-8', '-mx-8', 'rounded-2xl');
                     section.querySelectorAll('[id^="orig-"]').forEach(el => el.classList.remove('opacity-40'));
                     if (autoScroll) {
-                        section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        scrollToActiveText(true, true);
                     }
                 }
                 statusEl.innerText = `${chapter_label} ` + currentId;
