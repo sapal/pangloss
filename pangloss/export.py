@@ -98,7 +98,7 @@ def export_results(metadata: StoryMetadata, audio_dir: Path, output_dir: str, so
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
     
-    title_slug = metadata['title'].lower().replace(" ", "-").replace("/", "-")
+    title_slug = metadata['title'].lower().replace(" ", "-").replace("/", "-").replace(":", "-")
     
     # 1. Generate MP3
     print(f"Merging audio chunks into {title_slug}.mp3...")
