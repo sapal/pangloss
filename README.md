@@ -31,6 +31,7 @@ Built with a philosophy of "optimism through caching," Pangloss ensures that exp
 2. **Install dependencies:**
    ```bash
    pip install google-genai
+   sudo apt-get install ffmpeg
    ```
 
 ## Usage
