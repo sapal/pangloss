@@ -58,10 +58,10 @@ def test_token_usage_tracking():
     with patch('google.genai.Client') as mock_client:
         api = GeminiAPI(api_key="fake")
         
-        assert "gemini-3.5-flash" in api.usage
+        assert "gemini-3.7-flash" in api.usage
         assert "gemini-3.1-flash-tts-preview" in api.usage
-        assert api.usage["gemini-3.5-flash"]["input_tokens"] == 0
-        assert api.usage["gemini-3.5-flash"]["output_tokens"] == 0
+        assert api.usage["gemini-3.7-flash"]["input_tokens"] == 0
+        assert api.usage["gemini-3.7-flash"]["output_tokens"] == 0
         assert api.usage["gemini-3.1-flash-tts-preview"]["input_tokens"] == 0
         assert api.usage["gemini-3.1-flash-tts-preview"]["output_tokens"] == 0
         
@@ -75,8 +75,8 @@ def test_token_usage_tracking():
             "title": "", "characters": [], "difficultWords": [], "paragraphs": []
         }, 0, 1)
         
-        assert api.usage["gemini-3.5-flash"]["input_tokens"] == 120
-        assert api.usage["gemini-3.5-flash"]["output_tokens"] == 350
+        assert api.usage["gemini-3.7-flash"]["input_tokens"] == 120
+        assert api.usage["gemini-3.7-flash"]["output_tokens"] == 350
         
         mock_audio_response = MagicMock()
         mock_audio_response.usage_metadata.prompt_token_count = 80

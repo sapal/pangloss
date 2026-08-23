@@ -10,7 +10,7 @@ class GeminiAPI:
     def __init__(self, api_key: str):
         self.client = genai.Client(api_key=api_key)
         self.usage = {
-            "gemini-3.5-flash": {"input_tokens": 0, "output_tokens": 0},
+            "gemini-3.7-flash": {"input_tokens": 0, "output_tokens": 0},
             "gemini-3.1-flash-tts-preview": {"input_tokens": 0, "output_tokens": 0}
         }
 
@@ -94,15 +94,15 @@ CHUNK TO PROCESS:
 {chunk}
 """
         response = self.client.models.generate_content(
-            model="gemini-3.5-flash",
+            model="gemini-3.7-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
             )
         )
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
-            self.usage["gemini-3.5-flash"]["input_tokens"] += getattr(response.usage_metadata, 'prompt_token_count', 0)
-            self.usage["gemini-3.5-flash"]["output_tokens"] += getattr(response.usage_metadata, 'candidates_token_count', 0)
+            self.usage["gemini-3.7-flash"]["input_tokens"] += getattr(response.usage_metadata, 'prompt_token_count', 0)
+            self.usage["gemini-3.7-flash"]["output_tokens"] += getattr(response.usage_metadata, 'candidates_token_count', 0)
         return json.loads(response.text)
 
     @retry_with_pangloss()
@@ -189,7 +189,7 @@ SCRIPT:
         
         # Define pricing per token
         PRICING = {
-            "gemini-3.5-flash": {
+            "gemini-3.7-flash": {
                 "input": 1.50 / 1_000_000,
                 "output": 9.00 / 1_000_000
             },
