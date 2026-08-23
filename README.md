@@ -24,7 +24,7 @@ Built with a philosophy of "optimism through caching," Pangloss ensures that exp
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/pangloss.git
+   git clone https://github.com/sapal/pangloss.git
    cd pangloss
    ```
 
