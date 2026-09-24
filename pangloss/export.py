@@ -62,12 +62,16 @@ def generate_html(metadata: StoryMetadata, audio_chunks: dict, source_lang: str,
     play_svg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="black" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 22 12 6 21 6 3"/></svg>'
     pause_svg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="black" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'
 
-    # Load template
-    template_path = Path(__file__).parent / "templates" / "export.html"
-    with open(template_path, "r", encoding="utf-8") as f:
-        template_str = f.read()
-    
-    # Substitution mapping
+    # Load templates
+    templates_dir = Path(__file__).parent / "templates"
+    with open(templates_dir / "export.css", "r", encoding="utf-8") as f:
+        css_str = f.read()
+    with open(templates_dir / "export.js", "r", encoding="utf-8") as f:
+        js_str = f.read()
+    with open(templates_dir / "export.html", "r", encoding="utf-8") as f:
+        html_str = f.read()
+
+    # Substitution mapping for HTML
     subs = {
         "source_lang_code": "pl" if source_lang == "Polish" else "en",
         "title": metadata["title"],
@@ -82,16 +86,23 @@ def generate_html(metadata: StoryMetadata, audio_chunks: dict, source_lang: str,
         "play_svg": play_svg,
         "back_label": t["back"],
         "next_label": t["next"],
-        "metadata_json": json.dumps(metadata),
-        "audio_data_json": json.dumps(mp3_data_urls),
-        "play_svg_json": json.dumps(play_svg),
-        "pause_svg_json": json.dumps(pause_svg),
-        "chapter_label": t["chapter"],
-        "finished_label": t["finished"],
     }
-    
-    template = string.Template(template_str)
-    return template.substitute(subs)
+
+    # Render JS placeholders
+    js_rendered = (
+        js_str.replace("__METADATA_JSON__", json.dumps(metadata))
+        .replace("__AUDIO_DATA_JSON__", json.dumps(mp3_data_urls))
+        .replace("__PLAY_SVG_JSON__", json.dumps(play_svg))
+        .replace("__PAUSE_SVG_JSON__", json.dumps(pause_svg))
+        .replace("__CHAPTER_LABEL__", t["chapter"])
+        .replace("__FINISHED_LABEL__", t["finished"])
+    )
+
+    template = string.Template(html_str)
+    rendered_html = template.substitute(subs)
+    rendered_html = rendered_html.replace("/* INLINED_CSS */\n", css_str)
+    rendered_html = rendered_html.replace("/* INLINED_JS */\n", js_rendered)
+    return rendered_html
 
 def ensure_chunk_metadata(metadata: StoryMetadata, audio_dir: Path):
     """Ensures each paragraph in metadata has chunk timing and character range info."""
