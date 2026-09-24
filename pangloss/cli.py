@@ -160,6 +160,9 @@ def run_build(args):
                 log_pangloss(f"Failed to generate audio for paragraph {p['id']}: {e}")
                 print(f"Warning: Skipping paragraph {p['id']} due to error.")
 
+        if not dry_run:
+            engine.save_metadata(metadata)
+
     else:
         if not metadata:
             print(f"Error: No metadata found for job ID {args.render_only}")

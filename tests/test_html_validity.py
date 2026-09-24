@@ -91,11 +91,52 @@ def test_inlined_tailwind():
 
     assert "cdn.tailwindcss.com" not in html_content, "Generated HTML contains tailwind CDN script tag"
 
+def test_chunk_navigation_controls_and_styles():
+    metadata: StoryMetadata = {
+        "title": "Test Story",
+        "characters": [
+            {"name": "Narrator", "description": "The storyteller", "voice": "Puck", "voiceProfile": "Clear and neutral"}
+        ],
+        "difficultWords": [
+            {"word": "test", "explanation": "a trial or experiment", "anchors": ["test"]}
+        ],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "This is a test.",
+                "translatedText": "Dies ist ein Test.",
+                "turns": [{"speaker": "Narrator", "text": "Dies ist ein Test."}],
+                "chunks": [
+                    {
+                        "chunk_index": 0,
+                        "start_sec": 0.0,
+                        "end_sec": 5.0,
+                        "start_char": 0,
+                        "end_char": 18,
+                        "speakers": ["Narrator"]
+                    }
+                ]
+            }
+        ]
+    }
+    audio_chunks = {1: b"fake_wav_data"}
+    html_content = generate_html(metadata, audio_chunks, "English", "German", "B1")
+
+    assert 'id="prevChunkBtn"' in html_content
+    assert 'id="nextChunkBtn"' in html_content
+    assert '.chunk-target' in html_content
+    assert '.chunk-target.active-chunk' in html_content
+    assert 'seekToChunk' in html_content
+    assert 'scrollToActiveChunk' in html_content
+    assert 'prevChunk' in html_content
+    assert 'nextChunk' in html_content
+
 if __name__ == "__main__":
     try:
         test_generated_html_parses()
         test_inlined_fonts()
         test_inlined_tailwind()
+        test_chunk_navigation_controls_and_styles()
         print("HTML validity test passed!")
     except AssertionError as e:
         print(f"HTML validity test failed: {e}")

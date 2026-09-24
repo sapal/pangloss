@@ -7,7 +7,7 @@ from google import genai
 from google.genai import types
 from .models import StoryMetadata, Character, ProcessedParagraph
 from .utils import retry_with_pangloss
-from .audio import concat_wavs
+from .audio import concat_wavs, get_wav_duration_ms
 
 def to_dict(obj):
     if obj is None:
@@ -107,6 +107,31 @@ def partition_paragraph_into_subchunks(turns: list[dict], max_narrator_solo_sent
     if current_chunk:
         sub_chunks.append(current_chunk)
     return sub_chunks
+
+def compute_chunk_ranges(sub_chunks: list[list[dict]], translated_text: str) -> list[tuple[int, int]]:
+    """Calculates [start_char, end_char] in translated_text for each subchunk, snapping to paragraph breaks."""
+    chunk_ranges = []
+    pos = 0
+    for idx, c in enumerate(sub_chunks):
+        clen = sum(len(t.get("text", "")) for t in c)
+        chunk_ranges.append([pos, pos + clen])
+        pos += clen
+
+    if translated_text:
+        for i in range(len(chunk_ranges) - 1):
+            c_end = chunk_ranges[i][1]
+            prev_nn = translated_text.rfind("\n\n", max(0, c_end - 10), c_end)
+            next_nn = translated_text.find("\n\n", c_end, min(len(translated_text), c_end + 10))
+            if prev_nn != -1 and not any(ch.isalnum() for ch in translated_text[prev_nn:c_end]):
+                snap = prev_nn + 2
+                chunk_ranges[i][1] = snap
+                chunk_ranges[i+1][0] = snap
+            elif next_nn != -1 and not any(ch.isalnum() for ch in translated_text[c_end:next_nn]):
+                snap = next_nn
+                chunk_ranges[i][1] = snap
+                chunk_ranges[i+1][0] = snap
+
+    return [(r[0], r[1]) for r in chunk_ranges]
 
 class _MockInlineData:
     def __init__(self, data: bytes):
@@ -292,9 +317,14 @@ CHUNK TO PROCESS:
 
         sub_chunks = partition_paragraph_into_subchunks(paragraph.get("turns", []))
         if not sub_chunks:
+            paragraph["chunks"] = []
             return b""
 
+        chunk_ranges = compute_chunk_ranges(sub_chunks, paragraph.get("translatedText", ""))
         chunk_audio_chunks = []
+        chunks_info = []
+        current_time_sec = 0.0
+
         for chunk_idx, chunk in enumerate(sub_chunks):
             # Clean each turn's text for TTS and filter empty turns
             prepared_turns = []
@@ -380,12 +410,28 @@ CHUNK TO PROCESS:
             if not audio_data:
                 raise Exception(f"No audio data returned from Gemini TTS for paragraph {paragraph['id']} chunk {chunk_idx}. Finish reason: {candidate.finish_reason}")
 
+            dur_ms = get_wav_duration_ms(audio_data)
+            dur_sec = dur_ms / 1000.0
+            start_sec = round(current_time_sec, 3)
+            end_sec = round(current_time_sec + dur_sec, 3)
+            start_char, end_char = chunk_ranges[chunk_idx] if chunk_idx < len(chunk_ranges) else (0, 0)
+            chunks_info.append({
+                "chunk_index": chunk_idx,
+                "start_sec": start_sec,
+                "end_sec": end_sec,
+                "start_char": start_char,
+                "end_char": end_char,
+                "speakers": chunk_speakers,
+            })
+            current_time_sec = round(end_sec + 0.150, 3)
+
             chunk_audio_chunks.append(audio_data)
 
             # Pacing pause to protect against rate limits (skipped in dry_run or on last chunk)
             if not self.dry_run and len(sub_chunks) > 1 and chunk_idx < len(sub_chunks) - 1:
                 time.sleep(1.0)
 
+        paragraph["chunks"] = chunks_info
         return concat_wavs(chunk_audio_chunks, pause_ms=150)
 
     def print_token_usage_statistics(self):

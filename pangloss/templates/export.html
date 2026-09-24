@@ -596,13 +596,24 @@
                 transform: rotate(45deg);
                 margin-top: -2px;
             }
-            #prevBtn, #nextBtn {
+            #prevBtn, #nextBtn, #prevChunkBtn, #nextChunkBtn {
                 width: 32px !important;
                 height: 32px !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
             }
+        }
+        .chunk-target {
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            border-radius: 4px;
+            padding: 2px 2px;
+            -webkit-box-decoration-break: clone;
+            box-decoration-break: clone;
+        }
+        .chunk-target.active-chunk {
+            background-color: rgba(90, 90, 64, 0.12);
+            box-shadow: 0 0 10px 4px rgba(90, 90, 64, 0.12);
         }
     </style>
 </head>
@@ -660,8 +671,11 @@
             
             <!-- Navigation Button Group -->
             <div id="navButtonsContainer" class="flex">
-                <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper flex items-center justify-center" id="prevBtn" disabled>
+                <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper flex items-center justify-center" id="prevBtn" disabled title="Previous Paragraph">
                     <span class="label-text">${back_label}</span>
+                </button>
+                <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper flex items-center justify-center p-1" id="prevChunkBtn" title="Previous Chunk">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
                 </button>
                 <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper flex items-center justify-center" id="rewindBtn" title="Rewind 10s">
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -670,7 +684,10 @@
                         <text x="12" y="15.5" font-size="7.5" font-family="sans-serif" font-weight="bold" text-anchor="middle" fill="currentColor">10</text>
                     </svg>
                 </button>
-                <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper flex items-center justify-center" id="nextBtn">
+                <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper flex items-center justify-center p-1" id="nextChunkBtn" title="Next Chunk">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+                </button>
+                <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper flex items-center justify-center" id="nextBtn" title="Next Paragraph">
                     <span class="label-text">${next_label}</span>
                 </button>
             </div>
@@ -704,8 +721,12 @@
         const rewindBtn = document.getElementById('rewindBtn');
         const closeDrawer = document.getElementById('closeDrawer');
         
+        const prevChunkBtn = document.getElementById('prevChunkBtn');
+        const nextChunkBtn = document.getElementById('nextChunkBtn');
+
         let currentId = null;
         let isPlaying = false;
+        let currentActiveChunk = null;
 
         const PLAY_SVG = ${play_svg_json};
         const PAUSE_SVG = ${pause_svg_json};
@@ -746,6 +767,60 @@
             }
         });
 
+        function applyWords(html, sortedWords) {
+            let result = html;
+            sortedWords.forEach(dw => {
+                const anchors = dw.anchors || [dw.word];
+                anchors.forEach(anchor => {
+                    const escaped = anchor.replace(/[.*+?^$${}()[\]\\]/g, '\\$$&');
+                    const regex = new RegExp("\\b" + escaped + "\\b", 'gi');
+                    result = result.replace(regex, `<span class="word" onclick="toggleTooltip(event, this)">$$&<div class="tooltip" onclick="event.stopPropagation()"><strong>$${dw.word}</strong>: $${dw.explanation}</div></span>`);
+                });
+            });
+            return result;
+        }
+
+        function renderTransRow(p, rowIdx, rawText, sortedWords, rowStart, rowEnd) {
+            if (!rawText) return "";
+            let cleanText = rawText.replace(/<[a-zA-Z\s_-]+>/g, "");
+            const chunks = p.chunks;
+            if (!chunks || chunks.length === 0) {
+                let html = md(cleanText);
+                return applyWords(html, sortedWords);
+            }
+
+            const overlapping = chunks.filter(c => Math.max(rowStart, c.start_char) < Math.min(rowEnd, c.end_char));
+            if (overlapping.length === 0) {
+                let html = md(cleanText);
+                return applyWords(html, sortedWords);
+            }
+
+            if (overlapping.length === 1) {
+                const c = overlapping[0];
+                const hMatch = cleanText.match(/^(#+)\s*(.*$$)/);
+                if (hMatch) {
+                    const level = hMatch[1].length;
+                    let hContent = md(hMatch[2]);
+                    hContent = applyWords(hContent, sortedWords);
+                    return `<h$${level}><span class="chunk-target chunk-p$${p.id}-c$${c.chunk_index}" data-para-id="$${p.id}" data-chunk-idx="$${c.chunk_index}" onclick="seekToChunk(event, $${p.id}, $${c.chunk_index})">$${hContent}</span></h$${level}>`;
+                } else {
+                    let content = md(cleanText);
+                    content = applyWords(content, sortedWords);
+                    return `<span class="chunk-target chunk-p$${p.id}-c$${c.chunk_index}" data-para-id="$${p.id}" data-chunk-idx="$${c.chunk_index}" onclick="seekToChunk(event, $${p.id}, $${c.chunk_index})">$${content}</span>`;
+                }
+            } else {
+                const pieces = overlapping.map(c => {
+                    const oStart = Math.max(rowStart, c.start_char);
+                    const oEnd = Math.min(rowEnd, c.end_char);
+                    const segText = cleanText.slice(oStart - rowStart, oEnd - rowStart);
+                    let segHtml = md(segText);
+                    segHtml = applyWords(segHtml, sortedWords);
+                    return `<span class="chunk-target chunk-p$${p.id}-c$${c.chunk_index}" data-para-id="$${p.id}" data-chunk-idx="$${c.chunk_index}" onclick="seekToChunk(event, $${p.id}, $${c.chunk_index})">$${segHtml}</span>`;
+                });
+                return pieces.join('');
+            }
+        }
+
         function render() {
             storyEl.innerHTML = metadata.paragraphs.map(p => {
                 const speakersList = Array.from(new Set(p.turns.map(t => t.speaker)));
@@ -757,22 +832,21 @@
 
                 const sortedWords = [...metadata.difficultWords].sort((a,b) => b.word.length - a.word.length);
 
+                let pPos = 0;
                 const alignedContent = Array.from({ length: maxParas }).map((_, i) => {
                     let origPara = (origParas[i] || "").replace(/<[a-zA-Z\s_-]+>/g, "");
-                    let transPara = (transParas[i] || "").replace(/<[a-zA-Z\s_-]+>/g, "");
-                    sortedWords.forEach(dw => {
-                        const anchors = dw.anchors || [dw.word];
-                        anchors.forEach(anchor => {
-                            const escaped = anchor.replace(/[.*+?^$${}()[\]\\]/g, '\\$$&');
-                            const regex = new RegExp("\\b" + escaped + "\\b", 'gi');
-                            transPara = transPara.replace(regex, `<span class="word" onclick="toggleTooltip(event, this)">$$&<div class="tooltip" onclick="event.stopPropagation()"><strong>$${dw.word}</strong>: $${dw.explanation}</div></span>`);
-                        });
-                    });
+                    let transPara = (transParas[i] || "");
+
+                    const rowStart = pPos;
+                    const rowEnd = pPos + transPara.length;
+                    pPos = rowEnd + 2;
+
+                    const renderedTrans = renderTransRow(p, i, transPara, sortedWords, rowStart, rowEnd);
 
                     return `
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-start mb-8 last:mb-0">
                             <div id="orig-$${p.id}-$${i}" class="text-base md:text-xl leading-relaxed font-serif opacity-70 transition-all duration-300 text-content">$${md(origPara)}</div>
-                            <div id="trans-$${p.id}-$${i}" class="text-base md:text-xl leading-relaxed font-serif transition-all duration-300 text-content">$${md(transPara)}</div>
+                            <div id="trans-$${p.id}-$${i}" class="text-base md:text-xl leading-relaxed font-serif transition-all duration-300 text-content">$${renderedTrans}</div>
                         </div>
                     `;
                 }).join('');
@@ -838,6 +912,74 @@
             };
         }
 
+        function getActiveChunkInfo() {
+            if (currentId === null) return null;
+            const p = metadata.paragraphs.find(para => para.id === currentId);
+            if (!p || !p.chunks || p.chunks.length === 0) return null;
+            const t = player.currentTime;
+            let idx = p.chunks.findIndex(c => t >= c.start_sec && t < c.end_sec);
+            if (idx === -1) {
+                if (t >= p.chunks[p.chunks.length - 1].end_sec) {
+                    idx = p.chunks.length - 1;
+                } else {
+                    for (let i = 0; i < p.chunks.length; i++) {
+                        if (t < p.chunks[i].end_sec) {
+                            idx = i;
+                            break;
+                        }
+                    }
+                    if (idx === -1) idx = 0;
+                }
+            }
+            return { p, chunks: p.chunks, chunkIndex: idx, chunk: p.chunks[idx] };
+        }
+
+        function highlightActiveChunk(chunkIdx) {
+            if (currentActiveChunk === chunkIdx && document.querySelector(`.chunk-p$${currentId}-c$${chunkIdx}.active-chunk`)) {
+                return;
+            }
+            document.querySelectorAll('.active-chunk').forEach(el => {
+                el.classList.remove('active-chunk');
+            });
+            if (chunkIdx !== null && currentId !== null) {
+                const els = document.querySelectorAll(`.chunk-p$${currentId}-c$${chunkIdx}`);
+                els.forEach(el => {
+                    el.classList.add('active-chunk');
+                });
+                currentActiveChunk = chunkIdx;
+            } else {
+                currentActiveChunk = null;
+            }
+        }
+
+        function scrollToActiveChunk(chunk, smooth = true, force = false) {
+            if (currentId === null) return false;
+            const els = document.querySelectorAll(`.chunk-p$${currentId}-c$${chunk.chunk_index}`);
+            if (els.length === 0) return false;
+
+            const firstEl = els[0];
+            const lastEl = els[els.length - 1];
+            const firstRect = firstEl.getBoundingClientRect();
+            const lastRect = lastEl.getBoundingClientRect();
+            const containerRect = scrollContainer.getBoundingClientRect();
+
+            const chunkDur = (chunk.end_sec - chunk.start_sec) || 1;
+            const chunkProgress = Math.max(0, Math.min(1, (player.currentTime - chunk.start_sec) / chunkDur));
+
+            const topY = firstRect.top;
+            const bottomY = lastRect.bottom;
+            const totalHeight = Math.max(firstRect.height, bottomY - topY);
+
+            const pointY = topY - containerRect.top + chunkProgress * totalHeight;
+            const margin = 150;
+            if (force || pointY < margin || pointY > scrollContainer.clientHeight - margin) {
+                const targetScrollTop = scrollContainer.scrollTop + pointY - scrollContainer.clientHeight / 2;
+                scrollContainer.scrollTo({ top: targetScrollTop, behavior: smooth ? 'smooth' : 'auto' });
+                return true;
+            }
+            return false;
+        }
+
         function scrollToActiveText(smooth = true, force = false) {
             if (currentId === null) return false;
             const p = metadata.paragraphs.find(para => para.id === currentId);
@@ -848,7 +990,6 @@
             const transParas = p.translatedText.split('\n\n');
             const maxParas = Math.max(origParas.length, transParas.length);
 
-            // Map overall progress to active sub-paragraph index
             const totalLen = origParas.reduce((acc, text) => acc + text.length, 0);
             let cumulativeLen = 0;
             let activeSubIndex = 0;
@@ -869,7 +1010,6 @@
             const transEl = document.getElementById(`trans-$${currentId}-$${activeSubIndex}`);
             if (!transEl) return false;
 
-            // Calculate start/end progress of the active sub-paragraph
             let startLen = 0;
             for (let i = 0; i < activeSubIndex; i++) {
                 if (origParas[i]) {
@@ -889,11 +1029,9 @@
 
             const rect = transEl.getBoundingClientRect();
             const containerRect = scrollContainer.getBoundingClientRect();
-            
-            // Calculate position of the read cursor relative to the scroll container
             const pointY = rect.top - containerRect.top + subProgress * rect.height;
 
-            const margin = 150; // pixels from top/bottom
+            const margin = 150;
             if (force || pointY < margin || pointY > scrollContainer.clientHeight - margin) {
                 const targetScrollTop = scrollContainer.scrollTop + pointY - scrollContainer.clientHeight / 2;
                 scrollContainer.scrollTo({ top: targetScrollTop, behavior: smooth ? 'smooth' : 'auto' });
@@ -902,13 +1040,108 @@
             return false;
         }
 
+        function seekToChunk(e, paraId, chunkIdx) {
+            if (e) e.stopPropagation();
+            if (currentId !== paraId) {
+                playPara(paraId, true);
+            }
+            const p = metadata.paragraphs.find(para => para.id === paraId);
+            if (p && p.chunks && p.chunks[chunkIdx]) {
+                const c = p.chunks[chunkIdx];
+                player.currentTime = c.start_sec;
+                highlightActiveChunk(c.chunk_index);
+                scrollToActiveChunk(c, true, true);
+                if (!isPlaying) {
+                    player.play();
+                    isPlaying = true;
+                    updateUI();
+                }
+            }
+        }
+
+        function prevChunk() {
+            const info = getActiveChunkInfo();
+            if (!info) {
+                const pIndex = metadata.paragraphs.findIndex(p => p.id === currentId);
+                if (pIndex > 0) playPara(metadata.paragraphs[pIndex - 1].id);
+                return;
+            }
+
+            if (player.currentTime > info.chunk.start_sec + 1.5) {
+                player.currentTime = info.chunk.start_sec;
+                highlightActiveChunk(info.chunk.chunk_index);
+                scrollToActiveChunk(info.chunk, true, true);
+            } else if (info.chunkIndex > 0) {
+                const prevC = info.chunks[info.chunkIndex - 1];
+                player.currentTime = prevC.start_sec;
+                highlightActiveChunk(prevC.chunk_index);
+                scrollToActiveChunk(prevC, true, true);
+            } else {
+                const pIndex = metadata.paragraphs.findIndex(p => p.id === currentId);
+                if (pIndex > 0) {
+                    const prevP = metadata.paragraphs[pIndex - 1];
+                    playPara(prevP.id, true);
+                    if (prevP.chunks && prevP.chunks.length > 0) {
+                        const lastC = prevP.chunks[prevP.chunks.length - 1];
+                        player.currentTime = lastC.start_sec;
+                        highlightActiveChunk(lastC.chunk_index);
+                        scrollToActiveChunk(lastC, true, true);
+                    }
+                } else {
+                    player.currentTime = 0;
+                    highlightActiveChunk(0);
+                    scrollToActiveChunk(info.chunk, true, true);
+                }
+            }
+        }
+
+        function nextChunk() {
+            const info = getActiveChunkInfo();
+            if (!info) {
+                const pIndex = metadata.paragraphs.findIndex(p => p.id === currentId);
+                if (pIndex < metadata.paragraphs.length - 1) playPara(metadata.paragraphs[pIndex + 1].id);
+                return;
+            }
+
+            if (info.chunkIndex < info.chunks.length - 1) {
+                const nextC = info.chunks[info.chunkIndex + 1];
+                player.currentTime = nextC.start_sec;
+                highlightActiveChunk(nextC.chunk_index);
+                scrollToActiveChunk(nextC, true, true);
+                if (!isPlaying) {
+                    player.play();
+                    isPlaying = true;
+                    updateUI();
+                }
+            } else {
+                const pIndex = metadata.paragraphs.findIndex(p => p.id === currentId);
+                if (pIndex < metadata.paragraphs.length - 1) {
+                    playPara(metadata.paragraphs[pIndex + 1].id);
+                }
+            }
+        }
+
+        if (prevChunkBtn) prevChunkBtn.onclick = prevChunk;
+        if (nextChunkBtn) nextChunkBtn.onclick = nextChunk;
+
         let lastScrollTime = 0;
         player.addEventListener('timeupdate', () => {
             if (!isPlaying || currentId === null) return;
+
+            const info = getActiveChunkInfo();
+            if (info) {
+                highlightActiveChunk(info.chunkIndex);
+            }
+
             const now = Date.now();
             if (now - lastScrollTime < 800) return;
             
-            const didScroll = scrollToActiveText(true, false);
+            let didScroll = false;
+            if (info) {
+                didScroll = scrollToActiveChunk(info.chunk, true, false);
+            } else {
+                didScroll = scrollToActiveText(true, false);
+            }
             if (didScroll) {
                 lastScrollTime = now;
             }
@@ -921,6 +1154,8 @@
             currentId = id;
             player.play();
             isPlaying = true;
+            currentActiveChunk = null;
+            highlightActiveChunk(0);
             updateUI();
         }
 
@@ -949,13 +1184,21 @@
                     section.classList.add('bg-accent/5', 'ring-1', 'ring-accent/10', 'shadow-sm', 'p-8', '-mx-8', 'rounded-2xl');
                     section.querySelectorAll('[id^="orig-"]').forEach(el => el.classList.remove('opacity-40'));
                     if (autoScroll) {
-                        scrollToActiveText(true, true);
+                        const info = getActiveChunkInfo();
+                        if (info) {
+                            highlightActiveChunk(info.chunkIndex);
+                            scrollToActiveChunk(info.chunk, true, true);
+                        } else {
+                            scrollToActiveText(true, true);
+                        }
                     }
                 }
                 statusEl.innerText = `${chapter_label} ` + currentId;
                 if (window.location.hash !== '#section-' + currentId) {
                     history.replaceState(null, null, '#section-' + currentId);
                 }
+            } else {
+                highlightActiveChunk(null);
             }
             playBtn.innerHTML = isPlaying ? PAUSE_SVG : PLAY_SVG;
             
@@ -997,6 +1240,7 @@
             } else {
                 isPlaying = false;
                 currentId = null;
+                highlightActiveChunk(null);
                 updateUI();
                 statusEl.innerText = '${finished_label}';
             }

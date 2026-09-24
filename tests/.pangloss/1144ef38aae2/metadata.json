@@ -48,19 +48,19 @@
       ]
     },
     {
-      "word": "das Gef\u00e4\u00df",
+      "word": "das Gefäß",
       "explanation": "the vessel, container, or pot",
       "anchors": [
-        "Keramikgef\u00e4\u00df",
-        "Gef\u00e4\u00df"
+        "Keramikgefäß",
+        "Gefäß"
       ]
     },
     {
-      "word": "z\u00f6gern",
+      "word": "zögern",
       "explanation": "to hesitate or pause before acting",
       "anchors": [
-        "z\u00f6gerte",
-        "z\u00f6gern"
+        "zögerte",
+        "zögern"
       ]
     },
     {
@@ -72,10 +72,10 @@
       ]
     },
     {
-      "word": "buchst\u00e4blich",
+      "word": "buchstäblich",
       "explanation": "literally, without exaggeration",
       "anchors": [
-        "buchst\u00e4blich"
+        "buchstäblich"
       ]
     },
     {
@@ -94,25 +94,25 @@
       ]
     },
     {
-      "word": "der L\u00e4rm",
+      "word": "der Lärm",
       "explanation": "the noise, racket, or din",
       "anchors": [
-        "L\u00e4rm"
+        "Lärm"
       ]
     },
     {
-      "word": "das L\u00e4cheln",
+      "word": "das Lächeln",
       "explanation": "the smile",
       "anchors": [
-        "L\u00e4cheln"
+        "Lächeln"
       ]
     },
     {
-      "word": "anst\u00e4ndig",
+      "word": "anständig",
       "explanation": "decent, respectable, or proper",
       "anchors": [
-        "anst\u00e4ndige",
-        "anst\u00e4ndig"
+        "anständige",
+        "anständig"
       ]
     },
     {
@@ -134,11 +134,11 @@
     {
       "id": 1,
       "originalText": "# The Quantum Teapot\n\nIt was a cold morning in London, but Arthur didn't mind. He was looking at something **impossible**.\n\n## The Discovery\n\n\"Pass me the sugar, would you?\" asked *Elara*, her eyes fixed on the ceramic vessel.\n\nArthur hesitated. \"It's floating, Elara. The teapot is literally hovering six inches above the table.\"",
-      "translatedText": "# Die Quanten-Teekanne\n\nEs war ein kalter Morgen in London, aber Arthur machte das nichts aus. Er starrte auf etwas **Unm\u00f6gliches**.\n\n## Die Entdeckung\n\n\u201eGibst du mir bitte den Zucker?\u201c, fragte *Elara*, deren Augen auf das Keramikgef\u00e4\u00df gerichtet waren.\n\nArthur z\u00f6gerte. \u201eSie schwebt, Elara. Die Teekanne schwebt buchst\u00e4blich f\u00fcnfzehn Zentimeter \u00fcber dem Tisch.\u201c",
+      "translatedText": "# Die Quanten-Teekanne\n\nEs war ein kalter Morgen in London, aber Arthur machte das nichts aus. Er starrte auf etwas **Unmögliches**.\n\n## Die Entdeckung\n\n„Gibst du mir bitte den Zucker?“, fragte *Elara*, deren Augen auf das Keramikgefäß gerichtet waren.\n\nArthur zögerte. „Sie schwebt, Elara. Die Teekanne schwebt buchstäblich fünfzehn Zentimeter über dem Tisch.“",
       "turns": [
         {
           "speaker": "Narrator",
-          "text": "# Die Quanten-Teekanne\n\nEs war ein kalter Morgen in London, aber Arthur machte das nichts aus. Er starrte auf etwas **Unm\u00f6gliches**.\n\n## Die Entdeckung\n\n\u201e"
+          "text": "# Die Quanten-Teekanne\n\nEs war ein kalter Morgen in London, aber Arthur machte das nichts aus. Er starrte auf etwas **Unmögliches**.\n\n## Die Entdeckung\n\n„"
         },
         {
           "speaker": "Elara",
@@ -146,34 +146,58 @@
         },
         {
           "speaker": "Narrator",
-          "text": "\u201c, fragte *Elara*, deren Augen auf das Keramikgef\u00e4\u00df gerichtet waren.\n\nArthur z\u00f6gerte. \u201e"
+          "text": "“, fragte *Elara*, deren Augen auf das Keramikgefäß gerichtet waren.\n\nArthur zögerte. „"
         },
         {
           "speaker": "Arthur",
-          "text": "Sie schwebt, Elara. Die Teekanne schwebt buchst\u00e4blich f\u00fcnfzehn Zentimeter \u00fcber dem Tisch."
+          "text": "Sie schwebt, Elara. Die Teekanne schwebt buchstäblich fünfzehn Zentimeter über dem Tisch."
         },
         {
           "speaker": "Narrator",
-          "text": "\u201c"
+          "text": "“"
+        }
+      ],
+      "chunks": [
+        {
+          "chunk_index": 0,
+          "start_sec": 0.0,
+          "end_sec": 22.676,
+          "start_char": 0,
+          "end_char": 271,
+          "speakers": [
+            "Narrator",
+            "Elara"
+          ]
+        },
+        {
+          "chunk_index": 1,
+          "start_sec": 22.826,
+          "end_sec": 29.71,
+          "start_char": 271,
+          "end_char": 361,
+          "speakers": [
+            "Arthur",
+            "Narrator"
+          ]
         }
       ]
     },
     {
       "id": 2,
       "originalText": "Elara laughed. \"Minor detail! In the best of all possible worlds, tea serves itself.\"\n\n**\"But it's glowing blue!\"** Arthur insisted.\n\nBefore she could answer, three neighbors barged through the open kitchen door, drawn by the strange humming sound. \"What on earth is that infernal racket?\" demanded Inspector Barnes, clutching his heavy coat. \"Look at the quantum telemetry!\" gasped young technician Colin, waving a crackling sensor device. Mrs. Higgins peered over her spectacles with a calm smile. \"Never mind the strange physics, dears, as long as it pours a decent cup of chamomile.\" \"It is truly dangerous!\" Arthur shouted, backing into the pantry. \"No, it is a miracle,\" whispered Elara, reaching out a finger towards the porcelain spout.",
-      "translatedText": "Elara lachte. \u201eEin kleines Detail! In der besten aller m\u00f6glichen Welten serviert sich der Tee von selbst.\u201c\n\n**\u201eAber sie leuchtet blau!\u201c**, bestand Arthur darauf.\n\nBevor sie antworten konnte, st\u00fcrmten drei Nachbarn durch die offene K\u00fcchent\u00fcr, angelockt von dem seltsamen Summton. \u201eWas um Himmels willen ist das f\u00fcr ein h\u00f6llischer L\u00e4rm?\u201c, verlangte Inspektor Barnes zu wissen und hielt seinen schweren Mantel fest. \u201eSchauen Sie sich die Quantentelemetrie an!\u201c, keuchte der junge Techniker Colin und schwenkte ein knisterndes Sensorger\u00e4t. Frau Higgins blickte mit einem ruhigen L\u00e4cheln \u00fcber ihre Brille. \u201eMacht euch keine Gedanken \u00fcber die seltsame Physik, meine Lieben, solange sie eine anst\u00e4ndige Tasse Kamillentee einschenkt.\u201c \u201eDas ist wirklich gef\u00e4hrlich!\u201c, rief Arthur und wich in die Speisekammer zur\u00fcck. \u201eNein, es ist ein Wunder\u201c, fl\u00fcsterte Elara und streckte einen Finger nach der Porzellanschnauze aus.",
+      "translatedText": "Elara lachte. „Ein kleines Detail! In der besten aller möglichen Welten serviert sich der Tee von selbst.“\n\n**„Aber sie leuchtet blau!“**, bestand Arthur darauf.\n\nBevor sie antworten konnte, stürmten drei Nachbarn durch die offene Küchentür, angelockt von dem seltsamen Summton. „Was um Himmels willen ist das für ein höllischer Lärm?“, verlangte Inspektor Barnes zu wissen und hielt seinen schweren Mantel fest. „Schauen Sie sich die Quantentelemetrie an!“, keuchte der junge Techniker Colin und schwenkte ein knisterndes Sensorgerät. Frau Higgins blickte mit einem ruhigen Lächeln über ihre Brille. „Macht euch keine Gedanken über die seltsame Physik, meine Lieben, solange sie eine anständige Tasse Kamillentee einschenkt.“ „Das ist wirklich gefährlich!“, rief Arthur und wich in die Speisekammer zurück. „Nein, es ist ein Wunder“, flüsterte Elara und streckte einen Finger nach der Porzellanschnauze aus.",
       "turns": [
         {
           "speaker": "Narrator",
-          "text": "Elara lachte. \u201e"
+          "text": "Elara lachte. „"
         },
         {
           "speaker": "Elara",
-          "text": "Ein kleines Detail! In der besten aller m\u00f6glichen Welten serviert sich der Tee von selbst."
+          "text": "Ein kleines Detail! In der besten aller möglichen Welten serviert sich der Tee von selbst."
         },
         {
           "speaker": "Narrator",
-          "text": "\u201c\n\n**\u201e"
+          "text": "“\n\n**„"
         },
         {
           "speaker": "Arthur",
@@ -181,15 +205,15 @@
         },
         {
           "speaker": "Narrator",
-          "text": "\u201c**, bestand Arthur darauf.\n\nBevor sie antworten konnte, st\u00fcrmten drei Nachbarn durch die offene K\u00fcchent\u00fcr, angelockt von dem seltsamen Summton. \u201e"
+          "text": "“**, bestand Arthur darauf.\n\nBevor sie antworten konnte, stürmten drei Nachbarn durch die offene Küchentür, angelockt von dem seltsamen Summton. „"
         },
         {
           "speaker": "Inspector Barnes",
-          "text": "Was um Himmels willen ist das f\u00fcr ein h\u00f6llischer L\u00e4rm?"
+          "text": "Was um Himmels willen ist das für ein höllischer Lärm?"
         },
         {
           "speaker": "Narrator",
-          "text": "\u201c, verlangte Inspektor Barnes zu wissen und hielt seinen schweren Mantel fest. \u201e"
+          "text": "“, verlangte Inspektor Barnes zu wissen und hielt seinen schweren Mantel fest. „"
         },
         {
           "speaker": "Colin",
@@ -197,23 +221,23 @@
         },
         {
           "speaker": "Narrator",
-          "text": "\u201c, keuchte der junge Techniker Colin und schwenkte ein knisterndes Sensorger\u00e4t. Frau Higgins blickte mit einem ruhigen L\u00e4cheln \u00fcber ihre Brille. \u201e"
+          "text": "“, keuchte der junge Techniker Colin und schwenkte ein knisterndes Sensorgerät. Frau Higgins blickte mit einem ruhigen Lächeln über ihre Brille. „"
         },
         {
           "speaker": "Mrs. Higgins",
-          "text": "Macht euch keine Gedanken \u00fcber die seltsame Physik, meine Lieben, solange sie eine anst\u00e4ndige Tasse Kamillentee einschenkt."
+          "text": "Macht euch keine Gedanken über die seltsame Physik, meine Lieben, solange sie eine anständige Tasse Kamillentee einschenkt."
         },
         {
           "speaker": "Narrator",
-          "text": "\u201c \u201e"
+          "text": "“ „"
         },
         {
           "speaker": "Arthur",
-          "text": "Das ist wirklich gef\u00e4hrlich!"
+          "text": "Das ist wirklich gefährlich!"
         },
         {
           "speaker": "Narrator",
-          "text": "\u201c, rief Arthur und wich in die Speisekammer zur\u00fcck. \u201e"
+          "text": "“, rief Arthur und wich in die Speisekammer zurück. „"
         },
         {
           "speaker": "Elara",
@@ -221,7 +245,86 @@
         },
         {
           "speaker": "Narrator",
-          "text": "\u201c, fl\u00fcsterte Elara und streckte einen Finger nach der Porzellanschnauze aus."
+          "text": "“, flüsterte Elara und streckte einen Finger nach der Porzellanschnauze aus."
+        }
+      ],
+      "chunks": [
+        {
+          "chunk_index": 0,
+          "start_sec": 0.0,
+          "end_sec": 7.477,
+          "start_char": 0,
+          "end_char": 108,
+          "speakers": [
+            "Narrator",
+            "Elara"
+          ]
+        },
+        {
+          "chunk_index": 1,
+          "start_sec": 7.627,
+          "end_sec": 18.27,
+          "start_char": 108,
+          "end_char": 280,
+          "speakers": [
+            "Arthur",
+            "Narrator"
+          ]
+        },
+        {
+          "chunk_index": 2,
+          "start_sec": 18.42,
+          "end_sec": 25.7,
+          "start_char": 280,
+          "end_char": 414,
+          "speakers": [
+            "Inspector Barnes",
+            "Narrator"
+          ]
+        },
+        {
+          "chunk_index": 3,
+          "start_sec": 25.85,
+          "end_sec": 36.89,
+          "start_char": 414,
+          "end_char": 602,
+          "speakers": [
+            "Colin",
+            "Narrator"
+          ]
+        },
+        {
+          "chunk_index": 4,
+          "start_sec": 37.04,
+          "end_sec": 44.8,
+          "start_char": 602,
+          "end_char": 728,
+          "speakers": [
+            "Mrs. Higgins",
+            "Narrator"
+          ]
+        },
+        {
+          "chunk_index": 5,
+          "start_sec": 44.95,
+          "end_sec": 50.63,
+          "start_char": 728,
+          "end_char": 809,
+          "speakers": [
+            "Arthur",
+            "Narrator"
+          ]
+        },
+        {
+          "chunk_index": 6,
+          "start_sec": 50.78,
+          "end_sec": 59.06,
+          "start_char": 809,
+          "end_char": 908,
+          "speakers": [
+            "Elara",
+            "Narrator"
+          ]
         }
       ]
     }

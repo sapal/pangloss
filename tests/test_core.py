@@ -154,3 +154,75 @@ def test_import_characters():
     assert other is not None
     assert len(other["characters"]) == 3
     assert other["characters"][0]["name"] == "Narrator"
+
+def test_chunk_timings_and_ranges():
+    from pangloss.api import GeminiAPI, compute_chunk_ranges, partition_paragraph_into_subchunks
+    api = GeminiAPI(api_key="fake", lite=True, dry_run=True)
+    
+    p = {
+        "id": 1,
+        "originalText": "Hello world. How are you?\n\nFine.",
+        "translatedText": "Hallo Welt. Wie geht es dir?\n\nGut.",
+        "turns": [
+            {"speaker": "Narrator", "text": "Hallo Welt. "},
+            {"speaker": "Arthur", "text": "Wie geht es dir?\n\n"},
+            {"speaker": "Elara", "text": "Gut."}
+        ]
+    }
+    chars = [
+        {"name": "Narrator", "voice": "Rasalgethi", "voiceProfile": "Calm"},
+        {"name": "Arthur", "voice": "Alnilam", "voiceProfile": "Deep"},
+        {"name": "Elara", "voice": "Aoede", "voiceProfile": "Soft"}
+    ]
+    audio_data = api.generate_tts(p, chars)
+    assert audio_data.startswith(b"RIFF")
+    assert "chunks" in p
+    assert len(p["chunks"]) >= 1
+    
+    for c in p["chunks"]:
+        assert "chunk_index" in c
+        assert "start_sec" in c
+        assert "end_sec" in c
+        assert "start_char" in c
+        assert "end_char" in c
+        assert "speakers" in c
+        assert c["end_sec"] >= c["start_sec"]
+        assert c["end_char"] >= c["start_char"]
+
+def test_ensure_chunk_metadata_from_wav(tmp_path):
+    from pangloss.export import ensure_chunk_metadata
+    from pangloss.audio import concat_wavs, pcm_to_wav
+    
+    # Create two chunks separated by 150ms silence
+    c1 = pcm_to_wav(b'\x01\x00' * 2400) # 0.1s
+    c2 = pcm_to_wav(b'\x02\x00' * 4800) # 0.2s
+    combined = concat_wavs([c1, c2], pause_ms=150)
+    
+    wav_path = tmp_path / "1.wav"
+    with open(wav_path, "wb") as f:
+        f.write(combined)
+        
+    meta = {
+        "title": "Story",
+        "characters": [],
+        "difficultWords": [],
+        "paragraphs": [
+            {
+                "id": 1,
+                "translatedText": "Part one. Part two. Part three.",
+                "turns": [
+                    {"speaker": "Arthur", "text": "Part one. "},
+                    {"speaker": "Colin", "text": "Part two. "},
+                    {"speaker": "Inspector Barnes", "text": "Part three."}
+                ]
+            }
+        ]
+    }
+    
+    ensure_chunk_metadata(meta, tmp_path)
+    p = meta["paragraphs"][0]
+    assert "chunks" in p
+    assert len(p["chunks"]) == 2
+    assert p["chunks"][0]["start_sec"] == 0.0
+    assert "Arthur" in p["chunks"][0]["speakers"]
+    assert "Inspector Barnes" in p["chunks"][1]["speakers"]

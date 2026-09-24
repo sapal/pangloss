@@ -93,11 +93,66 @@ def generate_html(metadata: StoryMetadata, audio_chunks: dict, source_lang: str,
     template = string.Template(template_str)
     return template.substitute(subs)
 
+def ensure_chunk_metadata(metadata: StoryMetadata, audio_dir: Path):
+    """Ensures each paragraph in metadata has chunk timing and character range info."""
+    from .api import partition_paragraph_into_subchunks, compute_chunk_ranges
+    import io, wave
+
+    for p in metadata.get("paragraphs", []):
+        if p.get("chunks"):
+            continue
+        sub_chunks = partition_paragraph_into_subchunks(p.get("turns", []))
+        if not sub_chunks:
+            p["chunks"] = []
+            continue
+        chunk_ranges = compute_chunk_ranges(sub_chunks, p.get("translatedText", ""))
+
+        wav_path = audio_dir / f"{p['id']}.wav"
+        durs = []
+        if wav_path.exists():
+            try:
+                with open(wav_path, "rb") as f:
+                    wav_data = f.read()
+                with wave.open(io.BytesIO(wav_data), "rb") as w:
+                    frames = w.readframes(w.getnframes())
+                    sample_rate = w.getframerate()
+                silence = b"\x00\x00" * int(sample_rate * 0.15)
+                parts = frames.split(silence)
+                if len(parts) == len(sub_chunks):
+                    for part in parts:
+                        durs.append(round((len(part) / 2) / sample_rate, 3))
+            except Exception:
+                durs = []
+
+        if len(durs) != len(sub_chunks):
+            durs = [5.0] * len(sub_chunks)
+
+        chunks_info = []
+        curr_time = 0.0
+        for idx, c in enumerate(sub_chunks):
+            spk = list(dict.fromkeys(t["speaker"] for t in c))
+            dur = durs[idx]
+            start_sec = round(curr_time, 3)
+            end_sec = round(curr_time + dur, 3)
+            start_char, end_char = chunk_ranges[idx] if idx < len(chunk_ranges) else (0, 0)
+            chunks_info.append({
+                "chunk_index": idx,
+                "start_sec": start_sec,
+                "end_sec": end_sec,
+                "start_char": start_char,
+                "end_char": end_char,
+                "speakers": spk
+            })
+            curr_time = round(end_sec + 0.150, 3)
+        p["chunks"] = chunks_info
+
 def export_results(metadata: StoryMetadata, audio_dir: Path, output_dir: str, source_lang: str, target_lang: str, level: str):
     """Orchestrates the export of HTML and MP3 files."""
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
-    
+
+    ensure_chunk_metadata(metadata, audio_dir)
+
     title_slug = metadata['title'].lower().replace(" ", "-").replace("/", "-").replace(":", "-")
     
     # 1. Generate MP3
