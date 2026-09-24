@@ -400,7 +400,7 @@
         .drawer { transform: translateX(100%); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         .drawer.active { transform: translateX(0); }
         .word { position: relative; border-bottom: 2px solid #5A5A40; cursor: help; display: inline; text-underline-offset: 4px; }
-        .word:hover .tooltip { display: block; }
+        .word:hover .tooltip, .word.active-tooltip .tooltip { display: block; }
         .tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translate(-50%, -20px); background: #1A1A1A; color: #F9F7F2; padding: 25px; width: 300px; z-index: 1000; font-size: 0.9rem; font-family: sans-serif; border-radius: 0; box-shadow: 0 15px 45px rgba(0,0,0,0.6); line-height: 1.5; font-style: normal; }
         .text-content { text-align: justify; }
         .text-content h1 { font-size: 2.5rem; font-weight: 900; font-style: italic; margin-bottom: 1rem; line-height: 1.1; }
@@ -727,6 +727,25 @@
             return text;
         }
 
+        function toggleTooltip(e, el) {
+            if (e) e.stopPropagation();
+            const wasActive = el.classList.contains('active-tooltip');
+            document.querySelectorAll('.word.active-tooltip').forEach(w => {
+                w.classList.remove('active-tooltip');
+            });
+            if (!wasActive) {
+                el.classList.add('active-tooltip');
+            }
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.word')) {
+                document.querySelectorAll('.word.active-tooltip').forEach(w => {
+                    w.classList.remove('active-tooltip');
+                });
+            }
+        });
+
         function render() {
             storyEl.innerHTML = metadata.paragraphs.map(p => {
                 const speakersList = Array.from(new Set(p.turns.map(t => t.speaker)));
@@ -746,7 +765,7 @@
                         anchors.forEach(anchor => {
                             const escaped = anchor.replace(/[.*+?^${}()[\]\\]/g, '\\$&');
                             const regex = new RegExp("\\b" + escaped + "\\b", 'gi');
-                            transPara = transPara.replace(regex, `<span class="word">$&<div class="tooltip"><strong>${dw.word}</strong>: ${dw.explanation}</div></span>`);
+                            transPara = transPara.replace(regex, `<span class="word" onclick="toggleTooltip(event, this)">$&<div class="tooltip" onclick="event.stopPropagation()"><strong>${dw.word}</strong>: ${dw.explanation}</div></span>`);
                         });
                     });
 
