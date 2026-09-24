@@ -131,12 +131,42 @@ def test_chunk_navigation_controls_and_styles():
     assert 'prevChunk' in html_content
     assert 'nextChunk' in html_content
 
+def test_no_nested_tooltips_with_multiple_anchors():
+    metadata: StoryMetadata = {
+        "title": "Test Story",
+        "characters": [
+            {"name": "Narrator", "description": "The storyteller", "voice": "Puck", "voiceProfile": "Clear and neutral"}
+        ],
+        "difficultWords": [
+            {"word": "schweben", "explanation": "to hover", "anchors": ["schwebt", "schweben"]},
+            {"word": "das Gefäß", "explanation": "vessel", "anchors": ["Keramikgefäß", "Gefäß"]},
+            {"word": "das Wunder", "explanation": "wonder", "anchors": ["Wunder"]}
+        ],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "Test",
+                "translatedText": "Sie schwebt über dem Keramikgefäß. Es ist ein Wunder.",
+                "turns": [{"speaker": "Narrator", "text": "Test"}]
+            }
+        ]
+    }
+    audio_chunks = {1: b"fake_wav_data"}
+    html_content = generate_html(metadata, audio_chunks, "English", "German", "B1")
+
+    # Verify export.js applyWords contains placeholder-based protection
+    assert "tagPlaceholders" in html_content
+    assert "wordPlaceholders" in html_content
+    assert "\\uE000WORD_" in html_content
+    assert "\\uE000TAG_" in html_content
+
 if __name__ == "__main__":
     try:
         test_generated_html_parses()
         test_inlined_fonts()
         test_inlined_tailwind()
         test_chunk_navigation_controls_and_styles()
+        test_no_nested_tooltips_with_multiple_anchors()
         print("HTML validity test passed!")
     except AssertionError as e:
         print(f"HTML validity test failed: {e}")

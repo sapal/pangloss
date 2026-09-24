@@ -60,15 +60,33 @@
         });
 
         function applyWords(html, sortedWords) {
+            if (!html || !sortedWords || sortedWords.length === 0) return html;
             let result = html;
+            const tagPlaceholders = [];
+            result = result.replace(/<[^>]+>/g, (tag) => {
+                const idx = tagPlaceholders.length;
+                tagPlaceholders.push(tag);
+                return `\uE000TAG_${idx}_\uE001`;
+            });
+
+            const wordPlaceholders = [];
             sortedWords.forEach(dw => {
                 const anchors = dw.anchors || [dw.word];
-                anchors.forEach(anchor => {
+                const sortedAnchors = [...anchors].sort((a, b) => b.length - a.length);
+                sortedAnchors.forEach(anchor => {
                     const escaped = anchor.replace(/[.*+?^${}()[\]\\]/g, '\\$&');
                     const regex = new RegExp("\\b" + escaped + "\\b", 'gi');
-                    result = result.replace(regex, `<span class="word" onclick="toggleTooltip(event, this)">$&<div class="tooltip" onclick="event.stopPropagation()"><strong>${dw.word}</strong>: ${dw.explanation}</div></span>`);
+                    result = result.replace(regex, (match) => {
+                        const idx = wordPlaceholders.length;
+                        const tooltipHtml = `<span class="word" onclick="toggleTooltip(event, this)">${match}<div class="tooltip" onclick="event.stopPropagation()"><strong>${dw.word}</strong>: ${dw.explanation}</div></span>`;
+                        wordPlaceholders.push(tooltipHtml);
+                        return `\uE000WORD_${idx}_\uE001`;
+                    });
                 });
             });
+
+            result = result.replace(/\uE000WORD_(\d+)_\uE001/g, (_, idx) => wordPlaceholders[idx]);
+            result = result.replace(/\uE000TAG_(\d+)_\uE001/g, (_, idx) => tagPlaceholders[idx]);
             return result;
         }
 
