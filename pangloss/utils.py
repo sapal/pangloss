@@ -31,11 +31,11 @@ def retry_with_pangloss(max_retries=3, initial_delay=2):
                 except Exception as e:
                     last_exception = e
                     if i < max_retries - 1:
-                        log_pangloss(f"API Rate Limit Hit or Error. Retrying in {delay}s...")
+                        log_pangloss(f"API Rate Limit Hit or Error ({type(e).__name__}: {e}). Retrying in {delay}s...")
                         time.sleep(delay)
                         delay *= 2
                     else:
-                        log_pangloss(f"Final failure after {max_retries} attempts.")
+                        log_pangloss(f"Final failure after {max_retries} attempts ({type(e).__name__}: {e}).")
             raise last_exception
         return wrapper
     return decorator

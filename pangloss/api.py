@@ -293,6 +293,7 @@ CHUNK TO PROCESS:
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
+                automatic_function_calling=dict(disable=True),
             )
         )
         if self.dry_run:
@@ -308,7 +309,38 @@ CHUNK TO PROCESS:
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
             self.usage["gemini-3.7-flash"]["input_tokens"] += getattr(response.usage_metadata, 'prompt_token_count', 0)
             self.usage["gemini-3.7-flash"]["output_tokens"] += getattr(response.usage_metadata, 'candidates_token_count', 0)
-        return json.loads(response.text)
+
+        raw_text = (response.text or "").strip()
+        if not raw_text:
+            finish_info = []
+            if getattr(response, "candidates", None) and response.candidates:
+                cand = response.candidates[0]
+                finish_info.append(f"finish_reason={cand.finish_reason}")
+                if getattr(cand, "finish_message", None):
+                    finish_info.append(f"finish_message={cand.finish_message}")
+                if getattr(cand, "safety_ratings", None):
+                    blocked = [r for r in cand.safety_ratings if getattr(r, "blocked", False)]
+                    if blocked:
+                        finish_info.append(f"blocked_safety_ratings={blocked}")
+            detail = f" ({', '.join(finish_info)})" if finish_info else ""
+            raise ValueError(f"Gemini returned an empty response{detail}.")
+
+        if raw_text.startswith("```"):
+            lines = raw_text.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            raw_text = "\n".join(lines).strip()
+
+        try:
+            return json.loads(raw_text)
+        except json.JSONDecodeError as err:
+            preview = raw_text[:300] + ("..." if len(raw_text) > 300 else "")
+            raise ValueError(
+                f"Failed to parse Gemini response as JSON: {err}.\n"
+                f"Raw response preview:\n{preview}"
+            ) from err
 
     @retry_with_pangloss()
     def generate_tts(self, paragraph: ProcessedParagraph, characters: List[Character]) -> bytes:
@@ -394,6 +426,7 @@ CHUNK TO PROCESS:
                 config=types.GenerateContentConfig(
                     response_modalities=["AUDIO"],
                     speech_config=speech_config,
+                    automatic_function_calling=dict(disable=True),
                 )
             )
             if hasattr(response, 'usage_metadata') and response.usage_metadata:
