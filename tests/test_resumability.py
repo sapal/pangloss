@@ -6,6 +6,7 @@ from pathlib import Path
 import json
 
 class TestResumability(unittest.TestCase):
+    @patch.dict('os.environ', {'GEMINI_API_KEY': 'fake_key'})
     @patch('pangloss.cli.GeminiAPI')
     @patch('pangloss.cli.CacheEngine')
     @patch('builtins.open', new_callable=unittest.mock.mock_open, read_data="Para 1\n\nPara 2\n\nPara 3")

@@ -10,7 +10,10 @@ class CacheEngine:
         self.job_id = options.get("render_only") or self._generate_job_id(input_file, options)
         self.cache_root = self.input_file.parent / ".pangloss"
         self.cache_dir = self.cache_root / self.job_id
-        self.audio_dir = self.cache_dir / "audio_chunks"
+        if options.get("lite"):
+            self.audio_dir = self.cache_dir / "audio_chunks_lite"
+        else:
+            self.audio_dir = self.cache_dir / "audio_chunks"
         
         if not options.get("render_only"):
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -28,8 +31,6 @@ class CacheEngine:
             with open(input_file, "rb") as f:
                 file_content = f.read()
         except FileNotFoundError:
-            # If render-only and file is missing, we might have issues, 
-            # but usually build mode requires the file.
             file_content = b""
             
         file_hash = hashlib.sha256(file_content).hexdigest()
@@ -38,13 +39,13 @@ class CacheEngine:
         return hashlib.sha256(combined).hexdigest()[:12]
 
     def save_metadata(self, metadata: dict):
-        with open(self.cache_dir / "metadata.json", "w") as f:
-            json.dump(metadata, f, indent=2)
+        with open(self.cache_dir / "metadata.json", "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
 
     def load_metadata(self) -> Optional[dict]:
         path = self.cache_dir / "metadata.json"
         if path.exists():
-            with open(path, "r") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
         return None
 
@@ -78,6 +79,6 @@ class CacheEngine:
     def load_other_metadata(self, other_job_id: str) -> Optional[dict]:
         path = self.cache_root / other_job_id / "metadata.json"
         if path.exists():
-            with open(path, "r") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
         return None

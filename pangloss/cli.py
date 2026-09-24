@@ -12,7 +12,6 @@ from .utils import log_pangloss
 
 def chunk_text(text: str, words_per_chunk: int = 2000) -> list[dict]:
     # Split by paragraph boundaries (double newlines)
-    # We want to keep track of indices, so we split and then find the positions
     paragraphs = text.split("\n\n")
     chunks = []
     current_chunk_paragraphs = []
@@ -22,9 +21,6 @@ def chunk_text(text: str, words_per_chunk: int = 2000) -> list[dict]:
     char_ptr = 0
     for i, p in enumerate(paragraphs):
         word_count = len(p.split())
-        
-        # Calculate current end index for this paragraph
-        # Need to account for the \n\n if not the last one
         p_len = len(p)
         
         if current_word_count + word_count > words_per_chunk and current_chunk_paragraphs:
@@ -32,7 +28,7 @@ def chunk_text(text: str, words_per_chunk: int = 2000) -> list[dict]:
             chunks.append({
                 "text": chunk_text_str,
                 "start": current_start_index,
-                "end": char_ptr - 2 # Exclude the trailing \n\n
+                "end": char_ptr - 2
             })
             current_chunk_paragraphs = []
             current_word_count = 0
@@ -40,7 +36,7 @@ def chunk_text(text: str, words_per_chunk: int = 2000) -> list[dict]:
         
         current_chunk_paragraphs.append(p)
         current_word_count += word_count
-        char_ptr += p_len + 2 # Length of paragraph plus \n\n
+        char_ptr += p_len + 2
     
     if current_chunk_paragraphs:
         chunk_text_str = "\n\n".join(current_chunk_paragraphs)
@@ -57,13 +53,16 @@ def run_build(args):
     print(f"Job ID: {engine.job_id}")
     
     metadata = engine.load_metadata()
+    dry_run = getattr(args, "dry_run", False)
+    dump_requests = getattr(args, "dump_requests", None)
+    lite = getattr(args, "lite", False)
     
     if not args.render_only:
         api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
+        if not api_key and not dry_run:
             print("Error: GEMINI_API_KEY environment variable not set.")
             sys.exit(1)
-        api = GeminiAPI(api_key)
+        api = GeminiAPI(api_key or "dry_run_key", lite=lite, dry_run=dry_run, dump_requests=dump_requests)
 
         with open(args.filepath, "r", encoding="utf-8") as f:
             text = f.read()
@@ -90,15 +89,13 @@ def run_build(args):
                     print(f"Warning: Could not find project {args.import_characters} to import characters.")
         
         processed_starts = [c["start"] for c in metadata.get("processed_chunks", [])]
-        
-        # Check if all chunks are processed
         chunks_to_process = [c for c in all_chunks if c["start"] not in processed_starts]
         
         if chunks_to_process:
             print(f"Processing {len(chunks_to_process)} missing text chunks...")
             
             for i, chunk_info in enumerate(all_chunks):
-                if chunk_info["start"] in processed_starts:
+                if chunk_info["start"] in processed_starts and not dump_requests:
                     print(f"Skipping already processed chunk {i+1}/{len(all_chunks)}...")
                     continue
                 
@@ -133,10 +130,16 @@ def run_build(args):
                     "end": chunk_info["end"]
                 })
                 
-                # Intermediate save
-                engine.save_metadata(metadata)
+                if not dry_run:
+                    engine.save_metadata(metadata)
         else:
             print("All text chunks already processed.")
+            if dump_requests:
+                for i, chunk_info in enumerate(all_chunks):
+                    api.process_chunk(
+                        chunk_info["text"], args.target_lang, args.level, args.source_lang, 
+                        i == 0, metadata, i, len(all_chunks)
+                    )
 
         # 2. Generate Audio Chunks
         print("Generating audio chunks...")
@@ -144,14 +147,15 @@ def run_build(args):
         
         total_paras = len(metadata["paragraphs"])
         for idx, p in enumerate(metadata["paragraphs"], 1):
-            if p["id"] in cached_audio_ids:
+            if p["id"] in cached_audio_ids and not dry_run and not dump_requests:
                 continue
             
             print(f"Generating audio for paragraph {idx}/{total_paras}...")
             try:
                 pcm_data = api.generate_tts(p, metadata["characters"])
-                wav_data = pcm_to_wav(pcm_data)
-                engine.save_audio_chunk(p["id"], wav_data)
+                if not dry_run:
+                    wav_data = pcm_to_wav(pcm_data)
+                    engine.save_audio_chunk(p["id"], wav_data)
             except Exception as e:
                 log_pangloss(f"Failed to generate audio for paragraph {p['id']}: {e}")
                 print(f"Warning: Skipping paragraph {p['id']} due to error.")
@@ -161,6 +165,13 @@ def run_build(args):
             print(f"Error: No metadata found for job ID {args.render_only}")
             sys.exit(1)
         print(f"Render-only mode for job {args.render_only}")
+
+    # Dry run exit
+    if dry_run:
+        print("\nDry run completed successfully. No remote API calls made or cache modified.")
+        if dump_requests:
+            print(f"Requests dumped to: {os.path.abspath(dump_requests)}")
+        return
 
     # 3. Export Results
     html_file = export_results(
@@ -203,6 +214,9 @@ def main():
     build_parser.add_argument("--output-dir", default="./pangloss_output", help="Output directory (default: ./pangloss_output)")
     build_parser.add_argument("--render-only", help="Skip API calls; force generation from existing cache job ID")
     build_parser.add_argument("--import-characters", help="Import character names and voices from a previous Job ID")
+    build_parser.add_argument("--lite", action="store_true", help="Use Gemini 3.8 Flash Lite TTS instead of Gemini 3.8 Flash TTS")
+    build_parser.add_argument("--dry-run", action="store_true", help="Perform a dry run without calling remote Gemini API or saving cache")
+    build_parser.add_argument("--dump-requests", type=str, default=None, metavar="DIR", help="Directory to dump raw JSON request payloads")
     build_parser.add_argument("--serve", action="store_true", help="Spin up a local server to preview")
     
     args = parser.parse_args()

@@ -1,0 +1,235 @@
+{
+  "title": "Die Quanten-Teekanne",
+  "characters": [
+    {
+      "name": "Narrator",
+      "description": "The omniscient storyteller.",
+      "voice": "Rasalgethi",
+      "voiceProfile": "Male/Firm/Deep"
+    },
+    {
+      "name": "Arthur",
+      "description": "A cautious, anxious man who is alarmed by the impossible events.",
+      "voice": "Alnilam",
+      "voiceProfile": "Male/Firm/Deep"
+    },
+    {
+      "name": "Elara",
+      "description": "An optimistic and fascinated observer of the unusual phenomena.",
+      "voice": "Aoede",
+      "voiceProfile": "Female/Bright/Soft"
+    },
+    {
+      "name": "Inspector Barnes",
+      "description": "A grumpy, authoritarian neighbor demanding quiet.",
+      "voice": "Charon",
+      "voiceProfile": "Male/Firm/Deep"
+    },
+    {
+      "name": "Colin",
+      "description": "An enthusiastic young technician equipped with sensors.",
+      "voice": "Fenrir",
+      "voiceProfile": "Male/Firm/Deep"
+    },
+    {
+      "name": "Mrs. Higgins",
+      "description": "A calm, practical elderly neighbor who only cares about good tea.",
+      "voice": "Leda",
+      "voiceProfile": "Female/Bright/Soft"
+    }
+  ],
+  "difficultWords": [
+    {
+      "word": "die Entdeckung",
+      "explanation": "the discovery (finding something new or previously unknown)",
+      "anchors": [
+        "Entdeckung",
+        "Die Entdeckung"
+      ]
+    },
+    {
+      "word": "das Gef\u00e4\u00df",
+      "explanation": "the vessel, container, or pot",
+      "anchors": [
+        "Keramikgef\u00e4\u00df",
+        "Gef\u00e4\u00df"
+      ]
+    },
+    {
+      "word": "z\u00f6gern",
+      "explanation": "to hesitate or pause before acting",
+      "anchors": [
+        "z\u00f6gerte",
+        "z\u00f6gern"
+      ]
+    },
+    {
+      "word": "schweben",
+      "explanation": "to hover or float in the air",
+      "anchors": [
+        "schwebt",
+        "schweben"
+      ]
+    },
+    {
+      "word": "buchst\u00e4blich",
+      "explanation": "literally, without exaggeration",
+      "anchors": [
+        "buchst\u00e4blich"
+      ]
+    },
+    {
+      "word": "leuchten",
+      "explanation": "to glow or shine",
+      "anchors": [
+        "leuchtet",
+        "leuchten"
+      ]
+    },
+    {
+      "word": "der Summton",
+      "explanation": "the buzzing or humming sound",
+      "anchors": [
+        "Summton"
+      ]
+    },
+    {
+      "word": "der L\u00e4rm",
+      "explanation": "the noise, racket, or din",
+      "anchors": [
+        "L\u00e4rm"
+      ]
+    },
+    {
+      "word": "das L\u00e4cheln",
+      "explanation": "the smile",
+      "anchors": [
+        "L\u00e4cheln"
+      ]
+    },
+    {
+      "word": "anst\u00e4ndig",
+      "explanation": "decent, respectable, or proper",
+      "anchors": [
+        "anst\u00e4ndige",
+        "anst\u00e4ndig"
+      ]
+    },
+    {
+      "word": "die Speisekammer",
+      "explanation": "the pantry or larder for storing food",
+      "anchors": [
+        "Speisekammer"
+      ]
+    },
+    {
+      "word": "das Wunder",
+      "explanation": "the miracle or wonder",
+      "anchors": [
+        "Wunder"
+      ]
+    }
+  ],
+  "paragraphs": [
+    {
+      "id": 1,
+      "originalText": "# The Quantum Teapot\n\nIt was a cold morning in London, but Arthur didn't mind. He was looking at something **impossible**.\n\n## The Discovery\n\n\"Pass me the sugar, would you?\" asked *Elara*, her eyes fixed on the ceramic vessel.\n\nArthur hesitated. \"It's floating, Elara. The teapot is literally hovering six inches above the table.\"",
+      "translatedText": "# Die Quanten-Teekanne\n\nEs war ein kalter Morgen in London, aber Arthur machte das nichts aus. Er starrte auf etwas **Unm\u00f6gliches**.\n\n## Die Entdeckung\n\n\u201eGibst du mir bitte den Zucker?\u201c, fragte *Elara*, deren Augen auf das Keramikgef\u00e4\u00df gerichtet waren.\n\nArthur z\u00f6gerte. \u201eSie schwebt, Elara. Die Teekanne schwebt buchst\u00e4blich f\u00fcnfzehn Zentimeter \u00fcber dem Tisch.\u201c",
+      "turns": [
+        {
+          "speaker": "Narrator",
+          "text": "# Die Quanten-Teekanne\n\nEs war ein kalter Morgen in London, aber Arthur machte das nichts aus. Er starrte auf etwas **Unm\u00f6gliches**.\n\n## Die Entdeckung\n\n\u201e"
+        },
+        {
+          "speaker": "Elara",
+          "text": "Gibst du mir bitte den Zucker?"
+        },
+        {
+          "speaker": "Narrator",
+          "text": "\u201c, fragte *Elara*, deren Augen auf das Keramikgef\u00e4\u00df gerichtet waren.\n\nArthur z\u00f6gerte. \u201e"
+        },
+        {
+          "speaker": "Arthur",
+          "text": "Sie schwebt, Elara. Die Teekanne schwebt buchst\u00e4blich f\u00fcnfzehn Zentimeter \u00fcber dem Tisch."
+        },
+        {
+          "speaker": "Narrator",
+          "text": "\u201c"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "originalText": "Elara laughed. \"Minor detail! In the best of all possible worlds, tea serves itself.\"\n\n**\"But it's glowing blue!\"** Arthur insisted.\n\nBefore she could answer, three neighbors barged through the open kitchen door, drawn by the strange humming sound. \"What on earth is that infernal racket?\" demanded Inspector Barnes, clutching his heavy coat. \"Look at the quantum telemetry!\" gasped young technician Colin, waving a crackling sensor device. Mrs. Higgins peered over her spectacles with a calm smile. \"Never mind the strange physics, dears, as long as it pours a decent cup of chamomile.\" \"It is truly dangerous!\" Arthur shouted, backing into the pantry. \"No, it is a miracle,\" whispered Elara, reaching out a finger towards the porcelain spout.",
+      "translatedText": "Elara lachte. \u201eEin kleines Detail! In der besten aller m\u00f6glichen Welten serviert sich der Tee von selbst.\u201c\n\n**\u201eAber sie leuchtet blau!\u201c**, bestand Arthur darauf.\n\nBevor sie antworten konnte, st\u00fcrmten drei Nachbarn durch die offene K\u00fcchent\u00fcr, angelockt von dem seltsamen Summton. \u201eWas um Himmels willen ist das f\u00fcr ein h\u00f6llischer L\u00e4rm?\u201c, verlangte Inspektor Barnes zu wissen und hielt seinen schweren Mantel fest. \u201eSchauen Sie sich die Quantentelemetrie an!\u201c, keuchte der junge Techniker Colin und schwenkte ein knisterndes Sensorger\u00e4t. Frau Higgins blickte mit einem ruhigen L\u00e4cheln \u00fcber ihre Brille. \u201eMacht euch keine Gedanken \u00fcber die seltsame Physik, meine Lieben, solange sie eine anst\u00e4ndige Tasse Kamillentee einschenkt.\u201c \u201eDas ist wirklich gef\u00e4hrlich!\u201c, rief Arthur und wich in die Speisekammer zur\u00fcck. \u201eNein, es ist ein Wunder\u201c, fl\u00fcsterte Elara und streckte einen Finger nach der Porzellanschnauze aus.",
+      "turns": [
+        {
+          "speaker": "Narrator",
+          "text": "Elara lachte. \u201e"
+        },
+        {
+          "speaker": "Elara",
+          "text": "Ein kleines Detail! In der besten aller m\u00f6glichen Welten serviert sich der Tee von selbst."
+        },
+        {
+          "speaker": "Narrator",
+          "text": "\u201c\n\n**\u201e"
+        },
+        {
+          "speaker": "Arthur",
+          "text": "Aber sie leuchtet blau!"
+        },
+        {
+          "speaker": "Narrator",
+          "text": "\u201c**, bestand Arthur darauf.\n\nBevor sie antworten konnte, st\u00fcrmten drei Nachbarn durch die offene K\u00fcchent\u00fcr, angelockt von dem seltsamen Summton. \u201e"
+        },
+        {
+          "speaker": "Inspector Barnes",
+          "text": "Was um Himmels willen ist das f\u00fcr ein h\u00f6llischer L\u00e4rm?"
+        },
+        {
+          "speaker": "Narrator",
+          "text": "\u201c, verlangte Inspektor Barnes zu wissen und hielt seinen schweren Mantel fest. \u201e"
+        },
+        {
+          "speaker": "Colin",
+          "text": "Schauen Sie sich die Quantentelemetrie an!"
+        },
+        {
+          "speaker": "Narrator",
+          "text": "\u201c, keuchte der junge Techniker Colin und schwenkte ein knisterndes Sensorger\u00e4t. Frau Higgins blickte mit einem ruhigen L\u00e4cheln \u00fcber ihre Brille. \u201e"
+        },
+        {
+          "speaker": "Mrs. Higgins",
+          "text": "Macht euch keine Gedanken \u00fcber die seltsame Physik, meine Lieben, solange sie eine anst\u00e4ndige Tasse Kamillentee einschenkt."
+        },
+        {
+          "speaker": "Narrator",
+          "text": "\u201c \u201e"
+        },
+        {
+          "speaker": "Arthur",
+          "text": "Das ist wirklich gef\u00e4hrlich!"
+        },
+        {
+          "speaker": "Narrator",
+          "text": "\u201c, rief Arthur und wich in die Speisekammer zur\u00fcck. \u201e"
+        },
+        {
+          "speaker": "Elara",
+          "text": "Nein, es ist ein Wunder"
+        },
+        {
+          "speaker": "Narrator",
+          "text": "\u201c, fl\u00fcsterte Elara und streckte einen Finger nach der Porzellanschnauze aus."
+        }
+      ]
+    }
+  ],
+  "processed_chunks": [
+    {
+      "start": 0,
+      "end": 1102
+    }
+  ]
+}

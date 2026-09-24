@@ -739,7 +739,8 @@
                 const sortedWords = [...metadata.difficultWords].sort((a,b) => b.word.length - a.word.length);
 
                 const alignedContent = Array.from({ length: maxParas }).map((_, i) => {
-                    let transPara = transParas[i] || "";
+                    let origPara = (origParas[i] || "").replace(/<[a-zA-Z\s_-]+>/g, "");
+                    let transPara = (transParas[i] || "").replace(/<[a-zA-Z\s_-]+>/g, "");
                     sortedWords.forEach(dw => {
                         const anchors = dw.anchors || [dw.word];
                         anchors.forEach(anchor => {
@@ -751,7 +752,7 @@
 
                     return `
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-start mb-8 last:mb-0">
-                            <div id="orig-$${p.id}-$${i}" class="text-base md:text-xl leading-relaxed font-serif opacity-70 transition-all duration-300 text-content">$${md(origParas[i] || "")}</div>
+                            <div id="orig-$${p.id}-$${i}" class="text-base md:text-xl leading-relaxed font-serif opacity-70 transition-all duration-300 text-content">$${md(origPara)}</div>
                             <div id="trans-$${p.id}-$${i}" class="text-base md:text-xl leading-relaxed font-serif transition-all duration-300 text-content">$${md(transPara)}</div>
                         </div>
                     `;
