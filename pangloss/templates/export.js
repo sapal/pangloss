@@ -134,7 +134,7 @@
         function render() {
             storyEl.innerHTML = metadata.paragraphs.map(p => {
                 const speakersList = Array.from(new Set(p.turns.map(t => t.speaker)));
-                const speakers = speakersList.length > 0 ? speakersList.join(' • ') : 'Narrator';
+                const speakers = p.untranslated ? 'Untranslated' : (speakersList.length > 0 ? speakersList.join(' • ') : 'Narrator');
                 
                 const origParas = p.originalText.split('\n\n');
                 const transParas = p.translatedText.split('\n\n');
@@ -165,9 +165,11 @@
                     <div class="group/row border-b border-ink/5 pt-12 pb-12 transition-all first:pt-0" id="section-${p.id}">
                         <div class="flex items-center gap-4 mb-8">
                             <span class="text-[10px] uppercase tracking-[2px] font-bold text-muted border-b border-accent/30 pb-1">${speakers}</span>
+                            ${audioData[p.id] ? `
                             <button onclick="playPara(${p.id})" class="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center hover:bg-accent hover:text-paper transition-all">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                             </button>
+                            ` : ''}
                         </div>
                         <div id="trans-${p.id}" onclick="playPara(${p.id})" class="cursor-pointer">
                             ${alignedContent}
@@ -458,6 +460,15 @@
         });
 
         function playPara(id, restart = true) {
+            if (!audioData[id]) {
+                player.pause();
+                isPlaying = false;
+                currentId = id;
+                currentActiveChunk = null;
+                highlightActiveChunk(null);
+                updateUI();
+                return;
+            }
             if (restart || player.src !== audioData[id]) {
                 player.src = audioData[id];
             }
@@ -522,12 +533,18 @@
                 player.pause();
                 isPlaying = false;
             } else {
-                if (currentId !== null && player.src === audioData[currentId]) {
+                if (currentId !== null && audioData[currentId] && player.src === audioData[currentId]) {
                     player.play();
                     isPlaying = true;
                 } else {
-                    const nextId = currentId !== null ? currentId : metadata.paragraphs[0].id;
-                    playPara(nextId);
+                    let nextId = currentId !== null ? currentId : (metadata.paragraphs[0] ? metadata.paragraphs[0].id : null);
+                    if (nextId !== null && !audioData[nextId]) {
+                        const paraWithAudio = metadata.paragraphs.find(p => audioData[p.id]);
+                        if (paraWithAudio) nextId = paraWithAudio.id;
+                    }
+                    if (nextId !== null) {
+                        playPara(nextId);
+                    }
                 }
             }
             updateUI();
@@ -545,8 +562,12 @@
 
         player.onended = () => {
             const index = metadata.paragraphs.findIndex(p => p.id === currentId);
-            if (index < metadata.paragraphs.length - 1) {
-                playPara(metadata.paragraphs[index + 1].id);
+            let nextIndex = index + 1;
+            while (nextIndex < metadata.paragraphs.length && !audioData[metadata.paragraphs[nextIndex].id]) {
+                nextIndex++;
+            }
+            if (nextIndex < metadata.paragraphs.length) {
+                playPara(metadata.paragraphs[nextIndex].id);
             } else {
                 isPlaying = false;
                 currentId = null;

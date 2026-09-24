@@ -5,7 +5,10 @@ import re
 from typing import List, Callable, Optional
 from google import genai
 from google.genai import types
-from .models import StoryMetadata, Character, ProcessedParagraph
+from .models import (
+    StoryMetadata, Character, ProcessedParagraph,
+    CopyrightRestrictionError, is_copyright_error, is_copyright_error_text
+)
 from .utils import retry_with_pangloss
 from .audio import concat_wavs, get_wav_duration_ms
 
@@ -322,6 +325,8 @@ CHUNK TO PROCESS:
                     blocked = [r for r in cand.safety_ratings if getattr(r, "blocked", False)]
                     if blocked:
                         finish_info.append(f"blocked_safety_ratings={blocked}")
+                if "RECITATION" in str(getattr(cand, "finish_reason", "")).upper():
+                    raise CopyrightRestrictionError(f"Gemini recitation filter triggered: {cand.finish_reason}", raw_text="")
             detail = f" ({', '.join(finish_info)})" if finish_info else ""
             raise ValueError(f"Gemini returned an empty response{detail}.")
 
@@ -336,6 +341,11 @@ CHUNK TO PROCESS:
         try:
             return json.loads(raw_text)
         except json.JSONDecodeError as err:
+            if is_copyright_error_text(raw_text):
+                raise CopyrightRestrictionError(
+                    f"Gemini copyright restriction refusal: {raw_text[:200]}...",
+                    raw_text=raw_text
+                ) from err
             preview = raw_text[:300] + ("..." if len(raw_text) > 300 else "")
             raise ValueError(
                 f"Failed to parse Gemini response as JSON: {err}.\n"

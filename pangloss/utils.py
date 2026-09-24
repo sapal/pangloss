@@ -30,6 +30,9 @@ def retry_with_pangloss(max_retries=3, initial_delay=2):
                     return func(*args, **kwargs)
                 except Exception as e:
                     last_exception = e
+                    from .models import is_copyright_error
+                    if is_copyright_error(e):
+                        raise e
                     if i < max_retries - 1:
                         log_pangloss(f"API Rate Limit Hit or Error ({type(e).__name__}: {e}). Retrying in {delay}s...")
                         time.sleep(delay)

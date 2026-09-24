@@ -47,6 +47,91 @@ def chunk_text(text: str, words_per_chunk: int = 2000) -> list[dict]:
         })
     return chunks
 
+def process_chunk_with_fallback(
+    api: GeminiAPI,
+    text: str,
+    target_lang: str,
+    level: str,
+    source_lang: str,
+    is_first: bool,
+    metadata: dict,
+    chunk_index: int,
+    total_chunks: int,
+    depth: int = 0
+) -> dict:
+    from .models import is_copyright_error
+    try:
+        return api.process_chunk(
+            text, target_lang, level, source_lang,
+            is_first, metadata, chunk_index, total_chunks
+        )
+    except Exception as e:
+        if not is_copyright_error(e):
+            raise e
+
+        paras = [p for p in text.split("\n\n") if p.strip()]
+        if len(paras) <= 1:
+            log_pangloss("Copyright restriction reoccurred on atomic text fragment. Including untranslated in output without audio.")
+            explanatory_message = "[This section was omitted from translation due to copyright restrictions / Dieser Abschnitt wurde aufgrund von Urheberrechtsbeschränkungen nicht übersetzt]"
+            return {
+                "title": "",
+                "characters": [],
+                "difficultWords": [],
+                "paragraphs": [{
+                    "id": 1,
+                    "originalText": f"*{explanatory_message}*\n\n{text}",
+                    "translatedText": f"*{explanatory_message}*\n\n{text}",
+                    "turns": [],
+                    "skip_audio": True,
+                    "untranslated": True
+                }]
+            }
+
+        log_pangloss(f"Copyright restriction triggered on chunk ({e}). Slicing text into smaller chunks ({len(paras)} paragraphs)...")
+        mid = len(paras) // 2
+        slice_1 = "\n\n".join(paras[:mid])
+        slice_2 = "\n\n".join(paras[mid:])
+
+        # Process first slice
+        res_1 = process_chunk_with_fallback(
+            api, slice_1, target_lang, level, source_lang,
+            is_first, metadata, chunk_index, total_chunks, depth + 1
+        )
+
+        # Merge intermediate title and characters into metadata context for slice 2
+        if not metadata.get("title") and res_1.get("title"):
+            metadata["title"] = res_1["title"]
+        for new_char in res_1.get("characters", []):
+            if not any(c["name"].lower() == new_char["name"].lower() for c in metadata.get("characters", [])):
+                metadata["characters"].append(new_char)
+        for new_word in res_1.get("difficultWords", []):
+            if not any(w["word"].lower() == new_word["word"].lower() for w in metadata.get("difficultWords", [])):
+                metadata["difficultWords"].append(new_word)
+
+        # Process second slice
+        is_first_slice_2 = is_first and not bool(metadata.get("title"))
+        res_2 = process_chunk_with_fallback(
+            api, slice_2, target_lang, level, source_lang,
+            is_first_slice_2, metadata, chunk_index, total_chunks, depth + 1
+        )
+
+        combined_paras = res_1.get("paragraphs", []) + res_2.get("paragraphs", [])
+        for idx, p in enumerate(combined_paras, 1):
+            p["id"] = idx
+
+        return {
+            "title": res_1.get("title") or res_2.get("title") or "",
+            "characters": res_1.get("characters", []) + [
+                c for c in res_2.get("characters", [])
+                if not any(x["name"].lower() == c["name"].lower() for x in res_1.get("characters", []))
+            ],
+            "difficultWords": res_1.get("difficultWords", []) + [
+                w for w in res_2.get("difficultWords", [])
+                if not any(x["word"].lower() == w["word"].lower() for x in res_1.get("difficultWords", []))
+            ],
+            "paragraphs": combined_paras
+        }
+
 def run_build(args):
     # 1. Setup Engine
     engine = CacheEngine(args.filepath, vars(args))
@@ -100,8 +185,8 @@ def run_build(args):
                     continue
                 
                 print(f"Processing chunk {i+1}/{len(all_chunks)}...")
-                chunk_data = api.process_chunk(
-                    chunk_info["text"], args.target_lang, args.level, args.source_lang, 
+                chunk_data = process_chunk_with_fallback(
+                    api, chunk_info["text"], args.target_lang, args.level, args.source_lang, 
                     i == 0 and not metadata["processed_chunks"], metadata, i, len(all_chunks)
                 )
                 
@@ -147,6 +232,9 @@ def run_build(args):
         
         total_paras = len(metadata["paragraphs"])
         for idx, p in enumerate(metadata["paragraphs"], 1):
+            if p.get("skip_audio"):
+                print(f"Skipping audio for paragraph {p['id']} (marked untranslated / skip_audio).")
+                continue
             if p["id"] in cached_audio_ids and not dry_run and not dump_requests:
                 continue
             

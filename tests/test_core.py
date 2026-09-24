@@ -226,3 +226,96 @@ def test_ensure_chunk_metadata_from_wav(tmp_path):
     assert p["chunks"][0]["start_sec"] == 0.0
     assert "Arthur" in p["chunks"][0]["speakers"]
     assert "Inspector Barnes" in p["chunks"][1]["speakers"]
+
+
+def test_copyright_error_detection():
+    from pangloss.models import is_copyright_error, CopyrightRestrictionError
+
+    assert is_copyright_error(CopyrightRestrictionError("recitation"))
+    assert is_copyright_error(Exception("Recitation check failed"))
+    assert is_copyright_error(ValueError("Contains copyrighted material"))
+    assert is_copyright_error(ValueError("I cannot provide a full line-by-line translation of this text, but I can provide a general summary"))
+    assert is_copyright_error(ValueError("I cannot provide a verbatim translation of this text. However, I can offer a general summary"))
+    assert is_copyright_error(ValueError("I cannot provide a full translation of this excerpt, but I can offer a brief, general summary"))
+    assert not is_copyright_error(ValueError("JSON decode error: Expecting value"))
+    assert not is_copyright_error(RuntimeError("API quota exceeded"))
+
+
+
+def test_retry_with_pangloss_no_retry_on_copyright():
+    from pangloss.utils import retry_with_pangloss
+    from pangloss.models import CopyrightRestrictionError
+
+    calls = 0
+
+    @retry_with_pangloss(max_retries=3, initial_delay=0.01)
+    def fail_with_copyright():
+        nonlocal calls
+        calls += 1
+        raise CopyrightRestrictionError("Copyright refused")
+
+    try:
+        fail_with_copyright()
+    except CopyrightRestrictionError:
+        pass
+
+    assert calls == 1  # Should not retry!
+
+
+def test_process_chunk_with_fallback():
+    from pangloss.cli import process_chunk_with_fallback
+    from pangloss.models import CopyrightRestrictionError
+
+    api = MagicMock()
+
+    # Case 1: Non-copyright error is re-raised directly
+    api.process_chunk.side_effect = ValueError("Some other API error")
+    try:
+        process_chunk_with_fallback(api, "Para 1\n\nPara 2", "German", "B1", "English", True, {
+            "title": "", "characters": [], "difficultWords": [], "paragraphs": []
+        }, 0, 1)
+        assert False, "Should have re-raised ValueError"
+    except ValueError as e:
+        assert "Some other API error" in str(e)
+
+    # Case 2: Slicing on copyright error, slice 1 succeeds, slice 2 succeeds
+    text = "Paragraph 1\n\nParagraph 2"
+    def mock_process_chunk(chunk, target_lang, level, source_lang, is_first, metadata, chunk_index, total_chunks):
+        if chunk == text:
+            raise CopyrightRestrictionError("Recitation blocked")
+        return {
+            "title": "Title" if is_first else "",
+            "characters": [{"name": f"Char_{chunk[:5]}"}],
+            "difficultWords": [{"word": f"Word_{chunk[:5]}"}],
+            "paragraphs": [{"id": 1, "originalText": chunk, "translatedText": f"TR_{chunk}", "turns": [{"speaker": "Narrator", "text": chunk}]}]
+        }
+
+    api.process_chunk.side_effect = mock_process_chunk
+    res = process_chunk_with_fallback(api, text, "German", "B1", "English", True, {
+        "title": "", "characters": [], "difficultWords": [], "paragraphs": []
+    }, 0, 1)
+
+    assert res["title"] == "Title"
+    assert len(res["paragraphs"]) == 2
+    assert res["paragraphs"][0]["id"] == 1
+    assert res["paragraphs"][1]["id"] == 2
+    assert res["paragraphs"][0]["originalText"] == "Paragraph 1"
+    assert res["paragraphs"][1]["originalText"] == "Paragraph 2"
+
+    # Case 3: Copyright error reoccurs on atomic paragraph -> fallback untranslated
+    def mock_process_chunk_always_fails(chunk, *args, **kwargs):
+        raise CopyrightRestrictionError("Recitation blocked")
+
+    api.process_chunk.side_effect = mock_process_chunk_always_fails
+    res_fallback = process_chunk_with_fallback(api, "Atomic copyright paragraph", "German", "B1", "English", False, {
+        "title": "Existing", "characters": [], "difficultWords": [], "paragraphs": []
+    }, 0, 1)
+
+    assert len(res_fallback["paragraphs"]) == 1
+    p = res_fallback["paragraphs"][0]
+    assert p["skip_audio"] is True
+    assert p["untranslated"] is True
+    assert p["turns"] == []
+    assert "Atomic copyright paragraph" in p["originalText"]
+    assert "copyright restrictions" in p["originalText"]
+

@@ -160,6 +160,33 @@ def test_no_nested_tooltips_with_multiple_anchors():
     assert "\\uE000WORD_" in html_content
     assert "\\uE000TAG_" in html_content
 
+
+def test_untranslated_paragraph_html():
+    metadata: StoryMetadata = {
+        "title": "Test Story",
+        "characters": [
+            {"name": "Narrator", "description": "The storyteller", "voice": "Puck", "voiceProfile": "Clear and neutral"}
+        ],
+        "difficultWords": [],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "*[This section was omitted]*\n\nCopyrighted quote",
+                "translatedText": "*[This section was omitted]*\n\nCopyrighted quote",
+                "turns": [],
+                "skip_audio": True,
+                "untranslated": True
+            }
+        ]
+    }
+    audio_chunks = {}
+    html_content = generate_html(metadata, audio_chunks, "English", "German", "B1")
+    parser = SimpleHTMLValidator()
+    parser.feed(html_content)
+    assert len(parser.errors) == 0
+    assert "Untranslated" in html_content
+
+
 if __name__ == "__main__":
     try:
         test_generated_html_parses()
