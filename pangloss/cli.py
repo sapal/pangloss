@@ -73,14 +73,15 @@ def process_chunk_with_fallback(
         if len(paras) <= 1:
             log_pangloss("Copyright restriction reoccurred on atomic text fragment. Including untranslated in output without audio.")
             explanatory_message = "[This section was omitted from translation due to copyright restrictions / Dieser Abschnitt wurde aufgrund von Urheberrechtsbeschränkungen nicht übersetzt]"
+            clean_fragment = text.strip()
             return {
                 "title": "",
                 "characters": [],
                 "difficultWords": [],
                 "paragraphs": [{
                     "id": 1,
-                    "originalText": f"*{explanatory_message}*\n\n{text}",
-                    "translatedText": f"*{explanatory_message}*\n\n{text}",
+                    "originalText": clean_fragment,
+                    "translatedText": clean_fragment,
                     "turns": [],
                     "skip_audio": True,
                     "untranslated": True

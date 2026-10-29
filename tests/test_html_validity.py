@@ -184,7 +184,7 @@ def test_untranslated_paragraph_html():
     parser = SimpleHTMLValidator()
     parser.feed(html_content)
     assert len(parser.errors) == 0
-    assert "Untranslated" in html_content
+    assert "Omitted • Copyright Restriction" in html_content
 
 
 if __name__ == "__main__":

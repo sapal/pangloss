@@ -133,8 +133,45 @@
 
         function render() {
             storyEl.innerHTML = metadata.paragraphs.map(p => {
+                if (p.untranslated) {
+                    let rawUntranslated = (p.originalText || p.translatedText || "").trim();
+                    let cleanUntranslated = rawUntranslated.replace(/^\*\[.*?\]\*\s*/s, "").trim();
+
+                    return `
+                        <div class="group/row border-b border-ink/5 pt-12 pb-12 transition-all first:pt-0" id="section-${p.id}">
+                            <div class="flex items-center gap-4 mb-6">
+                                <span class="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[2px] font-bold px-3 py-1 rounded-full bg-amber-500/15 text-amber-900 border border-amber-500/30">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                    __OMITTED_BADGE__
+                                </span>
+                            </div>
+                            <div id="trans-${p.id}" onclick="playPara(${p.id})" class="cursor-pointer rounded-2xl p-6 md:p-8 bg-amber-500/5 border-2 border-dashed border-amber-500/30">
+                                <div class="flex items-start gap-4 mb-4">
+                                    <div class="p-2 rounded-lg bg-amber-500/15 text-amber-800 flex-shrink-0 mt-0.5">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-sans font-bold text-base md:text-lg text-amber-950 tracking-wide mb-1.5">
+                                            __OMITTED_TITLE__
+                                        </h4>
+                                        <p class="text-xs md:text-sm text-ink/75 font-sans leading-relaxed">
+                                            __OMITTED_DESC__
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="mt-5 pt-4 border-t border-amber-500/20">
+                                    <p class="text-[10px] uppercase tracking-[2px] font-bold text-muted mb-2">__ORIGINAL_TEXT_LABEL__</p>
+                                    <div class="font-serif text-base md:text-xl leading-relaxed text-ink/90 italic pl-4 border-l-2 border-amber-500/40">
+                                        ${md(cleanUntranslated)}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
                 const speakersList = Array.from(new Set(p.turns.map(t => t.speaker)));
-                const speakers = p.untranslated ? 'Untranslated' : (speakersList.length > 0 ? speakersList.join(' • ') : 'Narrator');
+                const speakers = speakersList.length > 0 ? speakersList.join(' • ') : 'Narrator';
                 
                 const origParas = p.originalText.split('\n\n');
                 const transParas = p.translatedText.split('\n\n');
@@ -269,23 +306,37 @@
             const els = document.querySelectorAll(`.chunk-p${currentId}-c${chunk.chunk_index}`);
             if (els.length === 0) return false;
 
-            const firstEl = els[0];
-            const lastEl = els[els.length - 1];
-            const firstRect = firstEl.getBoundingClientRect();
-            const lastRect = lastEl.getBoundingClientRect();
             const containerRect = scrollContainer.getBoundingClientRect();
-
             const chunkDur = (chunk.end_sec - chunk.start_sec) || 1;
             const chunkProgress = Math.max(0, Math.min(1, (player.currentTime - chunk.start_sec) / chunkDur));
 
-            const topY = firstRect.top;
-            const bottomY = lastRect.bottom;
-            const totalHeight = Math.max(firstRect.height, bottomY - topY);
+            // Select the exact translated element within the chunk currently being spoken
+            let targetEl = els[0];
+            let subProgress = chunkProgress;
+            if (els.length > 1) {
+                const lens = Array.from(els).map(el => Math.max(1, (el.textContent || '').length));
+                const totalTextLen = lens.reduce((sum, l) => sum + l, 0);
+                const targetCharIdx = chunkProgress * totalTextLen;
+                let curChars = 0;
+                for (let i = 0; i < els.length; i++) {
+                    const nextChars = curChars + lens[i];
+                    if (targetCharIdx <= nextChars || i === els.length - 1) {
+                        targetEl = els[i];
+                        subProgress = (targetCharIdx - curChars) / lens[i];
+                        break;
+                    }
+                    curChars = nextChars;
+                }
+            }
 
-            const pointY = topY - containerRect.top + chunkProgress * totalHeight;
-            const margin = 150;
-            if (force || pointY < margin || pointY > scrollContainer.clientHeight - margin) {
-                const targetScrollTop = scrollContainer.scrollTop + pointY - scrollContainer.clientHeight / 2;
+            const targetRect = targetEl.getBoundingClientRect();
+            // Center the currently spoken text in the translated column around the middle of the screen
+            const pointY = targetRect.top - containerRect.top + subProgress * targetRect.height;
+            const midY = scrollContainer.clientHeight / 2;
+            const diff = pointY - midY;
+
+            if (force || Math.abs(diff) > 40) {
+                const targetScrollTop = scrollContainer.scrollTop + diff;
                 scrollContainer.scrollTo({ top: targetScrollTop, behavior: smooth ? 'smooth' : 'auto' });
                 return true;
             }
@@ -297,55 +348,34 @@
             const p = metadata.paragraphs.find(para => para.id === currentId);
             if (!p) return false;
 
-            const progress = player.duration ? (player.currentTime / player.duration) : 0;
-            const origParas = p.originalText.split('\n\n');
             const transParas = p.translatedText.split('\n\n');
-            const maxParas = Math.max(origParas.length, transParas.length);
-
-            const totalLen = origParas.reduce((acc, text) => acc + text.length, 0);
+            const totalLen = transParas.reduce((acc, text) => acc + text.length, 0);
+            const progress = player.duration ? (player.currentTime / player.duration) : 0;
+            
             let cumulativeLen = 0;
             let activeSubIndex = 0;
             if (totalLen > 0) {
                 const targetLen = progress * totalLen;
-                for (let i = 0; i < origParas.length; i++) {
-                    cumulativeLen += origParas[i].length;
+                for (let i = 0; i < transParas.length; i++) {
+                    cumulativeLen += transParas[i].length;
                     if (targetLen <= cumulativeLen) {
                         activeSubIndex = i;
                         break;
                     }
                 }
             }
-            if (activeSubIndex >= maxParas) {
-                activeSubIndex = maxParas - 1;
-            }
 
-            const transEl = document.getElementById(`trans-${currentId}-${activeSubIndex}`);
+            const transEl = document.getElementById(`trans-${currentId}-${activeSubIndex}`) || document.getElementById(`section-${currentId}`);
             if (!transEl) return false;
 
-            let startLen = 0;
-            for (let i = 0; i < activeSubIndex; i++) {
-                if (origParas[i]) {
-                    startLen += origParas[i].length;
-                }
-            }
-            const activeParaLen = origParas[activeSubIndex] ? origParas[activeSubIndex].length : 0;
-            const endLen = startLen + activeParaLen;
-            const startProgress = startLen / (totalLen || 1);
-            const endProgress = endLen / (totalLen || 1);
-
-            let subProgress = 0;
-            if (endProgress > startProgress) {
-                subProgress = (progress - startProgress) / (endProgress - startProgress);
-                subProgress = Math.max(0, Math.min(1, subProgress));
-            }
-
-            const rect = transEl.getBoundingClientRect();
             const containerRect = scrollContainer.getBoundingClientRect();
-            const pointY = rect.top - containerRect.top + subProgress * rect.height;
+            const rect = transEl.getBoundingClientRect();
+            const pointY = rect.top - containerRect.top + rect.height / 2;
+            const midY = scrollContainer.clientHeight / 2;
+            const diff = pointY - midY;
 
-            const margin = 150;
-            if (force || pointY < margin || pointY > scrollContainer.clientHeight - margin) {
-                const targetScrollTop = scrollContainer.scrollTop + pointY - scrollContainer.clientHeight / 2;
+            if (force || Math.abs(diff) > 40) {
+                const targetScrollTop = scrollContainer.scrollTop + diff;
                 scrollContainer.scrollTo({ top: targetScrollTop, behavior: smooth ? 'smooth' : 'auto' });
                 return true;
             }
@@ -437,6 +467,7 @@
         if (nextChunkBtn) nextChunkBtn.onclick = nextChunk;
 
         let lastScrollTime = 0;
+        let lastScrolledChunk = null;
         player.addEventListener('timeupdate', () => {
             if (!isPlaying || currentId === null) return;
 
@@ -446,11 +477,15 @@
             }
 
             const now = Date.now();
-            if (now - lastScrollTime < 800) return;
+            const chunkChanged = info && (info.chunkIndex !== lastScrolledChunk);
+            if (!chunkChanged && now - lastScrollTime < 350) return;
             
             let didScroll = false;
             if (info) {
-                didScroll = scrollToActiveChunk(info.chunk, true, false);
+                didScroll = scrollToActiveChunk(info.chunk, true, chunkChanged);
+                if (chunkChanged) {
+                    lastScrolledChunk = info.chunkIndex;
+                }
             } else {
                 didScroll = scrollToActiveText(true, false);
             }
@@ -460,6 +495,7 @@
         });
 
         function playPara(id, restart = true) {
+            lastScrolledChunk = null;
             if (!audioData[id]) {
                 player.pause();
                 isPlaying = false;
@@ -514,7 +550,9 @@
                         }
                     }
                 }
-                statusEl.innerText = `__CHAPTER_LABEL__ ` + currentId;
+                const curP = metadata.paragraphs.find(para => para.id === currentId);
+                const isCurUntranslated = curP && curP.untranslated;
+                statusEl.innerText = `__CHAPTER_LABEL__ ` + currentId + (isCurUntranslated ? ' (__OMITTED_BADGE__)' : '');
                 if (window.location.hash !== '#section-' + currentId) {
                     history.replaceState(null, null, '#section-' + currentId);
                 }

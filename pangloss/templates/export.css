@@ -600,11 +600,13 @@
         .chunk-target {
             transition: background-color 0.3s ease, box-shadow 0.3s ease;
             border-radius: 4px;
-            padding: 2px 2px;
+            padding: 2px 0;
             -webkit-box-decoration-break: clone;
             box-decoration-break: clone;
         }
         .chunk-target.active-chunk {
             background-color: rgba(90, 90, 64, 0.12);
             box-shadow: 0 0 10px 4px rgba(90, 90, 64, 0.12);
+            padding: 2px 3px;
+            margin: 0 -3px;
         }

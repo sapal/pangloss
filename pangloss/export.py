@@ -37,6 +37,10 @@ def generate_html(metadata: StoryMetadata, audio_chunks: dict, source_lang: str,
             "chapter": "Paragraph",
             "finished": "Finished",
             "statusReady": "Ready!",
+            "omittedBadge": "Omitted • Copyright Restriction",
+            "omittedTitle": "Section omitted from translation due to copyright restrictions",
+            "omittedDesc": "This excerpt was flagged under model copyright restrictions and was omitted from translation and audio generation. The original English text is provided below.",
+            "originalTextLabel": "Original English Text",
         },
         "Polish": {
             "targetLang": "Język Docelowy",
@@ -53,6 +57,10 @@ def generate_html(metadata: StoryMetadata, audio_chunks: dict, source_lang: str,
             "chapter": "Akapit",
             "finished": "Zakończono",
             "statusReady": "Gotowe!",
+            "omittedBadge": "Pominięto • Prawa autorskie",
+            "omittedTitle": "Fragment pominięty ze względu na prawa autorskie",
+            "omittedDesc": "Ten fragment został objęty ograniczeniami praw autorskich modelu i pominięty w tłumaczeniu oraz audio. Poniżej znajduje się oryginalny tekst.",
+            "originalTextLabel": "Oryginalny tekst",
         }
     }
     
@@ -96,6 +104,10 @@ def generate_html(metadata: StoryMetadata, audio_chunks: dict, source_lang: str,
         .replace("__PAUSE_SVG_JSON__", json.dumps(pause_svg))
         .replace("__CHAPTER_LABEL__", t["chapter"])
         .replace("__FINISHED_LABEL__", t["finished"])
+        .replace("__OMITTED_BADGE__", t["omittedBadge"])
+        .replace("__OMITTED_TITLE__", t["omittedTitle"])
+        .replace("__OMITTED_DESC__", t["omittedDesc"])
+        .replace("__ORIGINAL_TEXT_LABEL__", t["originalTextLabel"])
     )
 
     template = string.Template(html_str)
@@ -110,13 +122,17 @@ def ensure_chunk_metadata(metadata: StoryMetadata, audio_dir: Path):
     import io, wave
 
     for p in metadata.get("paragraphs", []):
-        if p.get("chunks"):
-            continue
         sub_chunks = partition_paragraph_into_subchunks(p.get("turns", []))
         if not sub_chunks:
             p["chunks"] = []
             continue
         chunk_ranges = compute_chunk_ranges(sub_chunks, p.get("translatedText", ""))
+
+        if p.get("chunks"):
+            for idx, c in enumerate(p["chunks"]):
+                if idx < len(chunk_ranges):
+                    c["start_char"], c["end_char"] = chunk_ranges[idx]
+            continue
 
         wav_path = audio_dir / f"{p['id']}.wav"
         durs = []

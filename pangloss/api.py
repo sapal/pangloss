@@ -111,30 +111,83 @@ def partition_paragraph_into_subchunks(turns: list[dict], max_narrator_solo_sent
         sub_chunks.append(current_chunk)
     return sub_chunks
 
+def clean_turn_text_for_alignment(text: str) -> str:
+    """Removes vocal tags like <gasp>, <whisper> for character range alignment."""
+    return re.sub(r'<[a-zA-Z\s_/-]+>', '', text)
+
+def is_word_char(c: str) -> bool:
+    return c.isalnum()
+
+def snap_to_word_boundary(text: str, idx: int) -> int:
+    if idx <= 0 or idx >= len(text):
+        return idx
+    if not (is_word_char(text[idx - 1]) and is_word_char(text[idx])):
+        return idx
+    left = idx
+    while left > 0 and is_word_char(text[left - 1]):
+        left -= 1
+    right = idx
+    while right < len(text) and is_word_char(text[right]):
+        right += 1
+    if (idx - left) < (right - idx):
+        return left
+    else:
+        return right
+
 def compute_chunk_ranges(sub_chunks: list[list[dict]], translated_text: str) -> list[tuple[int, int]]:
-    """Calculates [start_char, end_char] in translated_text for each subchunk, snapping to paragraph breaks."""
-    chunk_ranges = []
+    """Calculates [start_char, end_char] in translated_text for each subchunk, snapping to paragraph and word breaks."""
+    if not sub_chunks:
+        return []
+    if len(sub_chunks) == 1:
+        return [(0, len(translated_text))]
+
+    sub_texts = []
+    for c in sub_chunks:
+        c_clean = ''.join(clean_turn_text_for_alignment(t.get('text', '')) for t in c)
+        sub_texts.append(c_clean)
+
+    boundaries = [0]
     pos = 0
-    for idx, c in enumerate(sub_chunks):
-        clen = sum(len(t.get("text", "")) for t in c)
-        chunk_ranges.append([pos, pos + clen])
-        pos += clen
 
-    if translated_text:
-        for i in range(len(chunk_ranges) - 1):
-            c_end = chunk_ranges[i][1]
-            prev_nn = translated_text.rfind("\n\n", max(0, c_end - 10), c_end)
-            next_nn = translated_text.find("\n\n", c_end, min(len(translated_text), c_end + 10))
-            if prev_nn != -1 and not any(ch.isalnum() for ch in translated_text[prev_nn:c_end]):
-                snap = prev_nn + 2
-                chunk_ranges[i][1] = snap
-                chunk_ranges[i+1][0] = snap
-            elif next_nn != -1 and not any(ch.isalnum() for ch in translated_text[c_end:next_nn]):
-                snap = next_nn
-                chunk_ranges[i][1] = snap
-                chunk_ranges[i+1][0] = snap
+    for i in range(len(sub_chunks) - 1):
+        expected_len = len(sub_texts[i])
+        expected_pos = pos + expected_len
+        next_text = sub_texts[i + 1].strip()
 
-    return [(r[0], r[1]) for r in chunk_ranges]
+        probe_words = [w for w in re.findall(r'[\w\'-]+|[„“\"\'»«]', next_text) if any(c.isalnum() for c in w)]
+        found_idx = -1
+        if probe_words:
+            sub_probe = ' '.join(probe_words[:2]) if len(probe_words) >= 2 else probe_words[0]
+            esc = re.escape(sub_probe)
+            pattern = esc.replace(r'\ ', r'\s+')
+            window_start = max(0, pos)
+            matches = [m.start() for m in re.finditer(pattern, translated_text[window_start:])]
+            if matches:
+                best = min(matches, key=lambda m: abs((window_start + m) - expected_pos))
+                found_idx = window_start + best
+
+        if found_idx != -1:
+            boundary = found_idx
+        else:
+            boundary = snap_to_word_boundary(translated_text, expected_pos)
+
+        # Snap to paragraph break if close to \n\n
+        prev_nn = translated_text.rfind('\n\n', max(0, boundary - 20), boundary)
+        next_nn = translated_text.find('\n\n', boundary, min(len(translated_text), boundary + 20))
+        if prev_nn != -1 and not any(is_word_char(c) for c in translated_text[prev_nn:boundary]):
+            boundary = prev_nn + 2
+        elif next_nn != -1 and not any(is_word_char(c) for c in translated_text[boundary:next_nn]):
+            boundary = next_nn
+
+        # Final guarantee: never cut a word
+        boundary = snap_to_word_boundary(translated_text, boundary)
+        if boundary <= boundaries[-1]:
+            boundary = snap_to_word_boundary(translated_text, boundaries[-1] + 1)
+        boundaries.append(boundary)
+        pos = boundary
+
+    boundaries.append(len(translated_text))
+    return [(boundaries[i], boundaries[i + 1]) for i in range(len(sub_chunks))]
 
 class _MockInlineData:
     def __init__(self, data: bytes):

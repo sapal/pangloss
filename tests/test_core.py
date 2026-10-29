@@ -228,6 +228,23 @@ def test_ensure_chunk_metadata_from_wav(tmp_path):
     assert "Inspector Barnes" in p["chunks"][1]["speakers"]
 
 
+def test_compute_chunk_ranges_no_word_breaks():
+    from pangloss.api import compute_chunk_ranges, snap_to_word_boundary
+
+    text = "„Professor McGonagall hat es mir nicht erzählt“, sagte Harrys Stimme."
+    # Turn has vocal tag <whisper>...</whisper> that is not in translated_text
+    sub_chunks = [
+        [{"speaker": "Minerva", "text": "<whisper>„Es tut mir leid, Albus“</whisper>"}],
+        [{"speaker": "Harry", "text": "„Professor McGonagall hat es mir nicht erzählt“, sagte Harrys Stimme."}]
+    ]
+    ranges = compute_chunk_ranges(sub_chunks, text)
+    assert len(ranges) == 2
+    # Boundary between chunk 0 and 1 must NOT be in the middle of McGonagall
+    boundary = ranges[0][1]
+    assert not (text[boundary - 1].isalnum() and text[boundary].isalnum())
+    assert ranges[1][0] == boundary
+
+
 def test_copyright_error_detection():
     from pangloss.models import is_copyright_error, CopyrightRestrictionError
 
@@ -317,5 +334,4 @@ def test_process_chunk_with_fallback():
     assert p["untranslated"] is True
     assert p["turns"] == []
     assert "Atomic copyright paragraph" in p["originalText"]
-    assert "copyright restrictions" in p["originalText"]
 
