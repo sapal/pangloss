@@ -45,11 +45,12 @@ class DifficultWord(TypedDict):
     explanation: str
     anchors: List[str]
 
-class Character(TypedDict):
+class Character(TypedDict, total=False):
     name: str
     description: str
     voice: str
     voiceProfile: str
+    aliases: Optional[List[str]]
 
 class ProcessedChunkRange(TypedDict):
     start: int

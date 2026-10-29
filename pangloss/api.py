@@ -269,7 +269,12 @@ class GeminiAPI:
         
         context_prompt = ""
         if not is_first or full_metadata["characters"]:
-            char_names = ", ".join([c["name"] for c in full_metadata["characters"]])
+            char_items = []
+            for c in full_metadata["characters"]:
+                aliases = c.get("aliases") or []
+                aliases_str = f" (aliases: {', '.join(aliases)})" if aliases else ""
+                char_items.append(f"{c['name']}{aliases_str}")
+            char_names = ", ".join(char_items)
             vocab_words = ", ".join([w["word"] for w in full_metadata["difficultWords"]])
             
             # Build known context
@@ -285,7 +290,9 @@ class GeminiAPI:
 
 CRITICAL: 
 - Continue the story exactly from where the previous part left off.
-- MAINTAIN CONSISTENCY: Use the same character names and descriptions for existing characters.
+- MAINTAIN CONSISTENCY: Use the exact same canonical character names for existing characters.
+- DO NOT invent new character names, nicknames, or shortened names for characters that are already in Known Characters (e.g. if 'Harry James Potter-Evans-Verres' is in Known Characters, you MUST use that exact canonical name in dialogue turns, NOT 'Harry' or 'Harry Potter').
+- Always use 'Narrator' as the speaker for narration; NEVER translate it to other languages (such as 'Erzähler').
 - DO NOT repeat words in the "difficultWords" list that are already present in the context above.
 - Identify at least 10 NEW difficult words from this specific chunk.
 """
@@ -308,10 +315,11 @@ Tasks for this chunk:
    The goal is to maintain a high-quality "audiobook" experience while minimizing the number of audio requests.
    Segments should ideally be between 15 and 120 seconds of spoken audio length.
 2. Identify every speaking character. You MUST include a "Narrator" character for non-dialogue text. If you encounter NEW characters (including the Narrator if this is the first chunk), provide a short description and voiceProfile.
+   - If a character is already listed in Known Characters, do NOT add them to the "characters" list.
    Assign a voice name from this list: 
    - Male/Firm/Deep: 'Puck', 'Charon', 'Kore', 'Fenrir', 'Orus', 'Algenib', 'Rasalgethi', 'Alnilam', 'Iapetus', 'Schedar'
    - Female/Bright/Soft: 'Zephyr', 'Aoede', 'Leda', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Despina', 'Erinome', 'Sulafat', 'Pulcherrima'
-3. For each paragraph/segment, provide a list of "turns". A turn is a piece of text spoken by a specific speaker. Narration (even narration between parts of sentence spoken by a character) MUST be assigned to the character "Narrator". Concatenating the text of turns MUST give exactly the translated text.
+3. For each paragraph/segment, provide a list of "turns". A turn is a piece of text spoken by a specific speaker. Narration (even narration between parts of sentence spoken by a character) MUST be assigned to the character "Narrator". If a character has a known canonical name from the context, you MUST use that exact canonical name as the speaker. Concatenating the text of turns MUST give exactly the translated text.
    You may include natural, point-in-time vocal tags in English inside angle brackets within dialogue turns where contextually appropriate, such as <laugh>, <sigh>, <gasp>, <cough>, <throat-clearing>, <whisper>, or <chuckle>.
 4. Extract key vocabulary words from the TRANSLATED text ({target_lang}), explaining them in {source_lang}.
    IMPORTANT (Proficiency Level: {level}): 
@@ -407,7 +415,11 @@ CHUNK TO PROCESS:
 
     @retry_with_pangloss()
     def generate_tts(self, paragraph: ProcessedParagraph, characters: List[Character]) -> bytes:
-        char_map = {c["name"].lower(): c for c in characters}
+        char_map = {}
+        for c in characters:
+            char_map[c["name"].lower()] = c
+            for a in c.get("aliases", []) or []:
+                char_map[a.lower()] = c
         narrator_char = char_map.get("narrator", characters[0] if characters else {"voice": "Rasalgethi", "voiceProfile": "Calm storytelling voice"})
 
         sub_chunks = partition_paragraph_into_subchunks(paragraph.get("turns", []))
@@ -529,6 +541,87 @@ CHUNK TO PROCESS:
 
         paragraph["chunks"] = chunks_info
         return concat_wavs(chunk_audio_chunks, pause_ms=150)
+
+    @retry_with_pangloss(max_retries=3, initial_delay=2)
+    def find_character_merges_with_llm(self, characters: List[Character]) -> List[dict]:
+        """
+        Asks the LLM to inspect the full character list and identify characters that represent
+        the same person/entity and should be merged.
+        """
+        if self.dry_run or not characters or len(characters) <= 1:
+            return []
+
+        clean_chars = [
+            {
+                "name": c.get("name"),
+                "description": c.get("description", ""),
+                "aliases": c.get("aliases", []) or [],
+                "voice": c.get("voice", ""),
+            }
+            for c in characters
+        ]
+
+        prompt = f"""
+You are an expert literary editor analyzing the cast of characters extracted from an audiobook.
+Review the following list of characters, descriptions, and aliases:
+
+{json.dumps(clean_chars, indent=2, ensure_ascii=False)}
+
+Identify any character entries that actually represent the SAME person, entity, or role.
+Common examples of duplicates to merge:
+- Full formal names vs. shortened names or first names (e.g., 'Harry James Potter-Evans-Verres' and 'Harry' or 'Harry Potter').
+- Titles / honorifics (e.g., 'Professor McGonagall' and 'Minerva McGonagall').
+- Translated roles (e.g., 'Erzähler' and 'Narrator').
+- Minor variations or typos in character names.
+
+Instructions:
+1. For each group that should be merged, pick the single best "canonical" name (prefer full/formal name or existing established name).
+2. List all other character names from the list that should be merged into that canonical character under "aliases".
+3. Do NOT merge distinct characters (e.g., Fred Weasley and George Weasley are different people; Ron Weasley is different).
+4. If no characters need to be merged, return an empty array for "merges".
+
+Return strictly JSON format:
+{{
+  "merges": [
+    {{
+      "canonical": "Harry James Potter-Evans-Verres",
+      "aliases": ["Harry", "Harry Potter"]
+    }}
+  ]
+}}
+"""
+        try:
+            response = self._generate_content_with_retry(
+                label="find_character_merges",
+                model="gemini-3.7-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema={
+                        "type": "OBJECT",
+                        "properties": {
+                            "merges": {
+                                "type": "ARRAY",
+                                "items": {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                        "canonical": {"type": "STRING"},
+                                        "aliases": {"type": "ARRAY", "items": {"type": "STRING"}}
+                                    },
+                                    "required": ["canonical", "aliases"]
+                                }
+                            }
+                        },
+                        "required": ["merges"]
+                    }
+                )
+            )
+            raw_text = response.text or "{}"
+            data = json.loads(raw_text)
+            return data.get("merges", [])
+        except Exception as e:
+            print(f"Warning: Failed to obtain or parse character merges from LLM: {e}")
+            return []
 
     def print_token_usage_statistics(self):
         print("\n" + "="*50)

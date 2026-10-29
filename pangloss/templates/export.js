@@ -229,6 +229,7 @@
                     </div>
                     <div>
                         <p class="text-xl font-serif font-bold mb-1">${char.name}</p>
+                        ${char.aliases && char.aliases.length > 0 ? `<p class="text-[11px] text-ink/50 font-sans font-medium mb-1.5">Aliases: ${char.aliases.join(', ')}</p>` : ''}
                         <p class="text-xs text-ink/60 font-serif italic leading-relaxed mb-3">${char.description}</p>
                         <div class="flex flex-wrap gap-2">
                             <span class="text-[9px] uppercase tracking-[2px] font-bold px-3 py-1 bg-accent text-paper rounded-full">Voice • ${char.voice}</span>

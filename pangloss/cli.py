@@ -8,6 +8,7 @@ from .engine import CacheEngine
 from .api import GeminiAPI
 from .audio import pcm_to_wav
 from .export import export_results
+from .characters import canonicalize_chunk_characters, apply_character_merges
 from .utils import log_pangloss
 
 def chunk_text(text: str, words_per_chunk: int = 2000) -> list[dict]:
@@ -102,9 +103,11 @@ def process_chunk_with_fallback(
         # Merge intermediate title and characters into metadata context for slice 2
         if not metadata.get("title") and res_1.get("title"):
             metadata["title"] = res_1["title"]
-        for new_char in res_1.get("characters", []):
-            if not any(c["name"].lower() == new_char["name"].lower() for c in metadata.get("characters", [])):
-                metadata["characters"].append(new_char)
+        canonicalize_chunk_characters(
+            res_1.get("characters", []),
+            res_1.get("paragraphs", []),
+            metadata.setdefault("characters", [])
+        )
         for new_word in res_1.get("difficultWords", []):
             if not any(w["word"].lower() == new_word["word"].lower() for w in metadata.get("difficultWords", [])):
                 metadata["difficultWords"].append(new_word)
@@ -120,12 +123,16 @@ def process_chunk_with_fallback(
         for idx, p in enumerate(combined_paras, 1):
             p["id"] = idx
 
+        combined_chars = list(res_1.get("characters", []))
+        canonicalize_chunk_characters(
+            res_2.get("characters", []),
+            res_2.get("paragraphs", []),
+            combined_chars
+        )
+
         return {
             "title": res_1.get("title") or res_2.get("title") or "",
-            "characters": res_1.get("characters", []) + [
-                c for c in res_2.get("characters", [])
-                if not any(x["name"].lower() == c["name"].lower() for x in res_1.get("characters", []))
-            ],
+            "characters": combined_chars,
             "difficultWords": res_1.get("difficultWords", []) + [
                 w for w in res_2.get("difficultWords", [])
                 if not any(x["word"].lower() == w["word"].lower() for x in res_1.get("difficultWords", []))
@@ -194,10 +201,12 @@ def run_build(args):
                 if not metadata["title"]:
                     metadata["title"] = chunk_data.get("title", "Untitled")
                 
-                # Merge characters
-                for new_char in chunk_data.get("characters", []):
-                    if not any(c["name"].lower() == new_char["name"].lower() for c in metadata["characters"]):
-                        metadata["characters"].append(new_char)
+                # Canonicalize characters and turn speakers
+                canonicalize_chunk_characters(
+                    chunk_data.get("characters", []),
+                    chunk_data.get("paragraphs", []),
+                    metadata["characters"]
+                )
                 
                 # Merge words
                 for new_word in chunk_data.get("difficultWords", []):
@@ -218,8 +227,32 @@ def run_build(args):
                 
                 if not dry_run:
                     engine.save_metadata(metadata)
+
+            # LLM character deduplication pass after processing text chunks
+            if not dry_run and len(metadata.get("characters", [])) > 1:
+                print("Asking LLM to check characters for any duplicates/merges...")
+                merges = api.find_character_merges_with_llm(metadata.get("characters", []))
+                if merges:
+                    print(f"LLM identified {len(merges)} character merge group(s):")
+                    for m in merges:
+                        print(f" - Merging {m.get('aliases')} -> {m.get('canonical')}")
+                    apply_character_merges(metadata, merges)
+                else:
+                    print("No duplicate characters identified by LLM.")
+                engine.save_metadata(metadata)
         else:
             print("All text chunks already processed.")
+            if getattr(args, "merge_characters", False) and not dry_run and len(metadata.get("characters", [])) > 1:
+                print("Running character deduplication pass with LLM...")
+                merges = api.find_character_merges_with_llm(metadata.get("characters", []))
+                if merges:
+                    print(f"LLM identified {len(merges)} character merge group(s):")
+                    for m in merges:
+                        print(f" - Merging {m.get('aliases')} -> {m.get('canonical')}")
+                    apply_character_merges(metadata, merges)
+                    engine.save_metadata(metadata)
+                else:
+                    print("No duplicate characters identified by LLM.")
             if dump_requests:
                 for i, chunk_info in enumerate(all_chunks):
                     api.process_chunk(
@@ -306,6 +339,7 @@ def main():
     build_parser.add_argument("--output-dir", default="./pangloss_output", help="Output directory (default: ./pangloss_output)")
     build_parser.add_argument("--render-only", help="Skip API calls; force generation from existing cache job ID")
     build_parser.add_argument("--import-characters", help="Import character names and voices from a previous Job ID")
+    build_parser.add_argument("--merge-characters", action="store_true", help="Run LLM character deduplication pass on characters")
     build_parser.add_argument("--lite", action="store_true", help="Use Gemini 3.8 Flash Lite TTS instead of Gemini 3.8 Flash TTS")
     build_parser.add_argument("--dry-run", action="store_true", help="Perform a dry run without calling remote Gemini API or saving cache")
     build_parser.add_argument("--dump-requests", type=str, default=None, metavar="DIR", help="Directory to dump raw JSON request payloads")
