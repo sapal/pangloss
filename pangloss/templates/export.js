@@ -11,6 +11,8 @@
         const drawer = document.getElementById('drawer');
         const overlay = document.getElementById('overlay');
         const drawerToggle = document.getElementById('drawerToggle');
+        const readingModeBtn = document.getElementById('readingModeToggle');
+        const readingModeLabel = document.getElementById('readingModeLabel');
         const rewindBtn = document.getElementById('rewindBtn');
         const speedBtn = document.getElementById('speedToggle');
         const closeDrawer = document.getElementById('closeDrawer');
@@ -20,6 +22,73 @@
 
         const PLAYBACK_RATES = [0.75, 0.9, 1.0, 1.25, 1.5];
         let currentPlaybackRate = 1.0;
+
+        function getDefaultReadingMode() {
+            if (window.matchMedia && window.matchMedia('(max-width: 767px) and (orientation: portrait)').matches) {
+                return 'hold-original';
+            }
+            return 'side-by-side';
+        }
+
+        let readingMode = getDefaultReadingMode();
+        let holdTimer = null;
+        let activeHoldEl = null;
+        let didHoldOriginal = false;
+
+        function setReadingMode(mode) {
+            readingMode = mode;
+            if (document.documentElement && document.documentElement.dataset) {
+                document.documentElement.dataset.readingMode = mode;
+            }
+            if (readingModeLabel) {
+                readingModeLabel.innerText = mode === 'hold-original' ? 'Hold for Orig' : 'Side-by-Side';
+            }
+        }
+        setReadingMode(readingMode);
+
+        if (readingModeBtn) {
+            readingModeBtn.onclick = () => {
+                setReadingMode(readingMode === 'hold-original' ? 'side-by-side' : 'hold-original');
+            };
+        }
+
+        function startHoldOriginal(targetEl) {
+            if (readingMode !== 'hold-original') return;
+            didHoldOriginal = true;
+            if (targetEl && targetEl.classList) {
+                activeHoldEl = targetEl;
+                targetEl.classList.add('holding-original');
+            }
+            if (document.documentElement && document.documentElement.classList) {
+                document.documentElement.classList.add('holding-original');
+            }
+        }
+
+        function endHoldOriginal() {
+            if (holdTimer) {
+                clearTimeout(holdTimer);
+                holdTimer = null;
+            }
+            if (activeHoldEl && activeHoldEl.classList) {
+                activeHoldEl.classList.remove('holding-original');
+                activeHoldEl = null;
+            }
+            if (document.documentElement && document.documentElement.classList) {
+                document.documentElement.classList.remove('holding-original');
+            }
+            document.querySelectorAll('.holding-original').forEach(el => {
+                el.classList.remove('holding-original');
+            });
+        }
+
+        function onSubparaHoldStart(e, el) {
+            if (readingMode !== 'hold-original') return;
+            didHoldOriginal = false;
+            if (holdTimer) clearTimeout(holdTimer);
+            holdTimer = setTimeout(() => {
+                startHoldOriginal(el);
+            }, 220);
+        }
 
         let currentId = null;
         let isPlaying = false;
@@ -231,7 +300,7 @@
                     const renderedTrans = renderTransRow(p, i, transPara, sortedWords, rowStart, rowEnd);
 
                     return `
-                        <div class="subpara-grid grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-12 items-start mb-10 last:mb-0">
+                        <div class="subpara-grid grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-12 items-start mb-10 last:mb-0" onmousedown="onSubparaHoldStart(event, this)" ontouchstart="onSubparaHoldStart(event, this)" onmouseup="endHoldOriginal()" onmouseleave="endHoldOriginal()" ontouchend="endHoldOriginal()" ontouchcancel="endHoldOriginal()">
                             <div id="orig-${p.id}-${i}" class="orig-col order-2 md:order-1 text-base md:text-xl leading-relaxed font-serif opacity-70 transition-all duration-300 text-content">${md(origPara)}</div>
                             <div id="trans-${p.id}-${i}" onclick="handleTransClick(event, ${p.id})" class="trans-col order-1 md:order-2 text-base md:text-xl leading-relaxed font-serif transition-all duration-300 text-content cursor-pointer">${renderedTrans}</div>
                         </div>
@@ -444,6 +513,10 @@
         }
 
         function handleTransClick(e, paraId) {
+            if (didHoldOriginal) {
+                didHoldOriginal = false;
+                return;
+            }
             if (hasTextSelection()) return;
             if (e && e.target && e.target.closest && e.target.closest('.word, .chunk-target')) return;
             if (currentId !== paraId || !isPlaying) {
@@ -453,6 +526,10 @@
 
         function seekToChunk(e, paraId, chunkIdx) {
             if (e) e.stopPropagation();
+            if (didHoldOriginal) {
+                didHoldOriginal = false;
+                return;
+            }
             if (hasTextSelection()) return;
             if (currentId !== paraId) {
                 playPara(paraId, true);

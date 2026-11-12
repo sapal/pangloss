@@ -751,8 +751,133 @@ def test_mobile_paragraph_ordering_and_spacing():
     assert res.returncode == 0, f"Node failed: {res.stderr}"
     story_html = json.loads(res.stdout.strip())["storyHtml"]
     assert "gap-3 md:gap-12 items-start mb-10 last:mb-0" in story_html
+    assert "order-2 md:gap-12" not in story_html
     assert "order-2 md:order-1" in story_html
     assert "order-1 md:order-2" in story_html
+
+
+def test_reading_mode_side_by_side_vs_hold_to_see_original():
+    import subprocess
+    from pathlib import Path
+
+    metadata: StoryMetadata = {
+        "title": "Test Story",
+        "characters": [{"name": "Narrator", "description": "N", "voice": "Puck", "voiceProfile": "Calm"}],
+        "difficultWords": [],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "Original English sentence.",
+                "translatedText": "Übersetzter deutscher Satz.",
+                "turns": [{"speaker": "Narrator", "text": "Übersetzter deutscher Satz."}]
+            }
+        ]
+    }
+    html_content = generate_html(metadata, {}, "English", "German", "B1")
+    assert 'id="readingModeToggle"' in html_content
+    assert 'data-reading-mode="hold-original"' in html_content
+
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'T',
+            paragraphs: [
+                {id: 1, originalText: 'Original.', translatedText: 'Übersetzt.', turns: [{speaker: 'Narrator', text: 'Übersetzt.'}]}
+            ],
+            characters: [],
+            difficultWords: []
+        }))
+        .replace('__AUDIO_DATA_JSON__', '{}')
+        .replace('__PLAY_SVG_JSON__', '""')
+        .replace('__PAUSE_SVG_JSON__', '""')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '""');
+
+    function runWithPortrait(isMobilePortrait) {
+        const classes = new Set();
+        const mockEl = (id) => {
+            const elClasses = new Set();
+            return {
+                id, innerHTML: '', textContent: '', innerText: '', style: {}, dataset: {},
+                classList: {
+                    add(...c){ c.forEach(x => elClasses.add(x)); },
+                    remove(...c){ c.forEach(x => elClasses.delete(x)); },
+                    toggle(x){ elClasses.has(x) ? elClasses.delete(x) : elClasses.add(x); },
+                    contains(x){ return elClasses.has(x); }
+                },
+                addEventListener(){}, appendChild(){}, querySelectorAll(){ return []; },
+                closest(){ return null; }
+            };
+        };
+        const elements = {};
+        const getEl = (id) => {
+            if (!elements[id]) elements[id] = mockEl(id);
+            return elements[id];
+        };
+        const docEl = mockEl('html');
+        const sandbox = {
+            document: {
+                getElementById: (id) => getEl(id),
+                querySelector: () => null,
+                querySelectorAll: () => [],
+                addEventListener: () => {},
+                documentElement: docEl
+            },
+            window: {
+                addEventListener: () => {},
+                location: { hash: '' },
+                matchMedia: (q) => ({
+                    matches: q.includes('max-width: 767px') && q.includes('orientation: portrait') ? isMobilePortrait : false
+                })
+            },
+            history: { replaceState(){} },
+            IntersectionObserver: function() { return { observe(){} }; },
+            setTimeout: (fn) => { fn(); return 1; },
+            clearTimeout: () => {},
+            console
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(code, sandbox);
+
+        const initialMode = docEl.dataset.readingMode;
+        getEl('readingModeToggle').onclick();
+        const toggledMode = docEl.dataset.readingMode;
+
+        // Test hold-to-see-original press & release
+        if (docEl.dataset.readingMode !== 'hold-original') {
+            getEl('readingModeToggle').onclick();
+        }
+        const subpara = mockEl('subpara');
+        sandbox.startHoldOriginal(subpara);
+        const holdingDuringPress = docEl.classList.contains('holding-original') || subpara.classList.contains('holding-original');
+        sandbox.endHoldOriginal();
+        const holdingAfterRelease = docEl.classList.contains('holding-original') || subpara.classList.contains('holding-original');
+
+        return { initialMode, toggledMode, holdingDuringPress, holdingAfterRelease };
+    }
+
+    console.log(JSON.stringify({
+        mobilePortrait: runWithPortrait(true),
+        desktop: runWithPortrait(false)
+    }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    data = json.loads(res.stdout.strip())
+    assert data["mobilePortrait"]["initialMode"] == "hold-original"
+    assert data["mobilePortrait"]["toggledMode"] == "side-by-side"
+    assert data["desktop"]["initialMode"] == "side-by-side"
+    assert data["desktop"]["toggledMode"] == "hold-original"
+    assert data["mobilePortrait"]["holdingDuringPress"] is True
+    assert data["mobilePortrait"]["holdingAfterRelease"] is False
+
 
 
 

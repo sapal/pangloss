@@ -520,8 +520,9 @@
             }
             #dictionaryContainer {
                 width: 100% !important;
+                flex-direction: column !important;
             }
-            #drawerToggle {
+            #drawerToggle, #readingModeToggle {
                 width: 100% !important;
                 justify-content: center !important;
                 padding: 12px !important;
@@ -633,4 +634,24 @@
             .trans-col {
                 order: 2;
             }
+        }
+        html[data-reading-mode="hold-original"] .subpara-grid {
+            grid-template-columns: 1fr !important;
+        }
+        html[data-reading-mode="hold-original"] .orig-col {
+            display: none;
+            order: 2 !important;
+            padding: 0.75rem 1rem;
+            border-left: 3px solid var(--accent);
+            background-color: var(--highlight);
+            border-radius: 0.5rem;
+            margin-top: 0.5rem;
+            opacity: 0.95 !important;
+        }
+        html[data-reading-mode="hold-original"] .trans-col {
+            order: 1 !important;
+        }
+        html[data-reading-mode="hold-original"].holding-original .orig-col,
+        html[data-reading-mode="hold-original"] .subpara-grid.holding-original .orig-col {
+            display: block;
         }
