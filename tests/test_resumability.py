@@ -136,6 +136,80 @@ class TestResumability(unittest.TestCase):
         self.assertEqual(len(metadata["characters"]), 1)
         self.assertIn("Failed to generate audio for 1 paragraph(s): [1]", output)
 
+    @patch.dict('os.environ', {'GEMINI_API_KEY': 'fake_key'})
+    @patch('pangloss.api.genai.Client')
+    @patch('pangloss.cli.CacheEngine')
+    @patch('builtins.open', new_callable=unittest.mock.mock_open, read_data="Para 1\n\nPara 2")
+    def test_save_and_resume_api_costs_in_metadata(self, mock_file, mock_engine_class, mock_genai_client):
+        import io
+        from contextlib import redirect_stdout
+        from pangloss.api import GeminiAPI
+
+        mock_engine = mock_engine_class.return_value
+        mock_engine.job_id = "test_cost_job"
+
+        # Simulate metadata saved from a previous interrupted run where chunk 0 was translated
+        # with 100,000 input tokens ($0.15) and 10,000 output tokens ($0.09) -> $0.240000
+        saved_metadata = {
+            "title": "Existing Title",
+            "characters": [
+                {"name": "Narrator", "description": "Narrator", "voice": "Rasalgethi", "voiceProfile": "Firm"}
+            ],
+            "difficultWords": [],
+            "paragraphs": [
+                {"id": 1, "originalText": "Para 1", "translatedText": "Absatz 1", "turns": [{"speaker": "Narrator", "text": "Absatz 1"}]}
+            ],
+            "processed_chunks": [{"start": 0, "end": 6}],
+            "characters_merged": True,
+            "api_usage": {
+                "gemini-3.7-flash": {"input_tokens": 100_000, "output_tokens": 10_000, "cost_usd": 0.24},
+            },
+            "total_cost_usd": 0.24,
+        }
+        mock_engine.load_metadata.return_value = saved_metadata
+        mock_engine.list_cached_audio.return_value = []
+
+        # On resume, only TTS for paragraph 1 runs:
+        # 20,000 input tokens ($0.01) + 50,000 output tokens ($0.45) on gemini-3.8-flash-tts -> $0.460000
+        def fake_generate_tts(self_api, paragraph, characters):
+            self_api.usage["gemini-3.8-flash-tts"]["input_tokens"] += 20_000
+            self_api.usage["gemini-3.8-flash-tts"]["output_tokens"] += 50_000
+            paragraph["chunks"] = [{
+                "chunk_index": 0, "start_sec": 0.0, "end_sec": 1.0,
+                "start_char": 0, "end_char": 8, "speakers": ["Narrator"]
+            }]
+            return b"\x00\x00" * 2400
+
+        args = argparse.Namespace(
+            filepath="fake.md",
+            target_lang="German",
+            source_lang="English",
+            level="B1",
+            output_dir="./out",
+            render_only=None,
+            import_characters=None,
+            merge_characters=False,
+            lite=False,
+            dry_run=False,
+            dump_requests=None,
+            serve=False,
+        )
+
+        buf = io.StringIO()
+        with patch.object(GeminiAPI, 'generate_tts', autospec=True, side_effect=fake_generate_tts), \
+             patch('pangloss.cli.chunk_text', return_value=[{"text": "Para 1", "start": 0, "end": 6}]), \
+             patch('pangloss.cli.export_results', return_value="fake.html"), \
+             redirect_stdout(buf):
+            run_build(args)
+
+        output = buf.getvalue()
+        # Session cost is $0.460000, previous cost was $0.240000, total cost so far is $0.700000
+        self.assertAlmostEqual(saved_metadata.get("total_cost_usd"), 0.70, places=6)
+        self.assertEqual(saved_metadata["api_usage"]["gemini-3.7-flash"]["input_tokens"], 100_000)
+        self.assertEqual(saved_metadata["api_usage"]["gemini-3.8-flash-tts"]["output_tokens"], 50_000)
+        self.assertIn("$0.460000", output)
+        self.assertIn("$0.700000", output)
+
 
 if __name__ == "__main__":
     unittest.main()

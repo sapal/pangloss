@@ -225,6 +225,21 @@ class _MockResponse:
         self.usage_metadata = None
 
 class GeminiAPI:
+    PRICING = {
+        "gemini-3.7-flash": {
+            "input": 1.50 / 1_000_000,
+            "output": 9.00 / 1_000_000,
+        },
+        "gemini-3.8-flash-tts": {
+            "input": 0.50 / 1_000_000,
+            "output": 9.00 / 1_000_000,
+        },
+        "gemini-3.8-flash-lite-tts": {
+            "input": 0.50 / 1_000_000,
+            "output": 6.00 / 1_000_000,
+        },
+    }
+
     def __init__(self, api_key: str, lite: bool = False,
                  dry_run: bool = False, dump_requests: Optional[str] = None):
         self.dry_run = dry_run
@@ -239,6 +254,11 @@ class GeminiAPI:
             "gemini-3.8-flash-tts": {"input_tokens": 0, "output_tokens": 0},
             "gemini-3.8-flash-lite-tts": {"input_tokens": 0, "output_tokens": 0},
         }
+        self.previous_usage = {
+            model: {"input_tokens": 0, "output_tokens": 0}
+            for model in self.PRICING
+        }
+        self.previous_cost_usd = 0.0
 
     def _dump_request(self, label: str, **kwargs):
         self.request_counter += 1
@@ -622,6 +642,9 @@ Return strictly JSON format:
                     }
                 )
             )
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                self.usage["gemini-3.7-flash"]["input_tokens"] += getattr(response.usage_metadata, 'prompt_token_count', 0)
+                self.usage["gemini-3.7-flash"]["output_tokens"] += getattr(response.usage_metadata, 'candidates_token_count', 0)
             raw_text = response.text or "{}"
             data = json.loads(raw_text)
             return data.get("merges", [])
@@ -629,40 +652,86 @@ Return strictly JSON format:
             print(f"Warning: Failed to obtain or parse character merges from LLM: {e}")
             return []
 
+    def _compute_usage_cost(self, usage_dict: dict) -> float:
+        total = 0.0
+        for model, counts in (usage_dict or {}).items():
+            if model in self.PRICING and isinstance(counts, dict):
+                in_tok = int(counts.get("input_tokens", 0) or 0)
+                out_tok = int(counts.get("output_tokens", 0) or 0)
+                total += in_tok * self.PRICING[model]["input"] + out_tok * self.PRICING[model]["output"]
+        return total
+
+    def load_usage_from_metadata(self, metadata: dict):
+        """Loads previously saved API token usage and cumulative cost from metadata when resuming."""
+        if not isinstance(metadata, dict):
+            return
+        saved_usage = metadata.get("api_usage")
+        if isinstance(saved_usage, dict):
+            for model in self.PRICING:
+                m_data = saved_usage.get(model)
+                if isinstance(m_data, dict):
+                    self.previous_usage[model] = {
+                        "input_tokens": int(m_data.get("input_tokens", 0) or 0),
+                        "output_tokens": int(m_data.get("output_tokens", 0) or 0),
+                    }
+        if metadata.get("total_cost_usd") is not None:
+            self.previous_cost_usd = float(metadata["total_cost_usd"])
+        else:
+            self.previous_cost_usd = self._compute_usage_cost(self.previous_usage)
+
+    def get_session_cost(self) -> float:
+        """Returns the API cost in USD for the current session only."""
+        return self._compute_usage_cost(self.usage)
+
+    def get_total_usage(self) -> dict:
+        """Returns combined token usage and cost per model across previous sessions and this session."""
+        combined = {}
+        for model, rates in self.PRICING.items():
+            prev = self.previous_usage.get(model, {"input_tokens": 0, "output_tokens": 0})
+            curr = self.usage.get(model, {"input_tokens": 0, "output_tokens": 0})
+            in_tok = int(prev.get("input_tokens", 0)) + int(curr.get("input_tokens", 0))
+            out_tok = int(prev.get("output_tokens", 0)) + int(curr.get("output_tokens", 0))
+            if in_tok > 0 or out_tok > 0:
+                cost = in_tok * rates["input"] + out_tok * rates["output"]
+                combined[model] = {
+                    "input_tokens": in_tok,
+                    "output_tokens": out_tok,
+                    "cost_usd": round(cost, 6),
+                }
+        return combined
+
+    def get_total_cost(self) -> float:
+        """Returns the cumulative API cost in USD across previous sessions and this session."""
+        return self.previous_cost_usd + self.get_session_cost()
+
+    def save_usage_to_metadata(self, metadata: dict):
+        """Persists cumulative API usage and total cost so far into metadata."""
+        if not isinstance(metadata, dict):
+            return
+        metadata["api_usage"] = self.get_total_usage()
+        metadata["total_cost_usd"] = round(self.get_total_cost(), 6)
+
     def print_token_usage_statistics(self):
         print("\n" + "="*50)
         print("GEMINI API TOKEN USAGE & COST STATISTICS")
         print("="*50)
-        
-        total_cost = 0.0
-        
-        PRICING = {
-            "gemini-3.7-flash": {
-                "input": 1.50 / 1_000_000,
-                "output": 9.00 / 1_000_000
-            },
-            "gemini-3.8-flash-tts": {
-                "input": 0.50 / 1_000_000,
-                "output": 9.00 / 1_000_000
-            },
-            "gemini-3.8-flash-lite-tts": {
-                "input": 0.50 / 1_000_000,
-                "output": 6.00 / 1_000_000
-            }
-        }
-        
+
+        session_cost = 0.0
+
         for model, usage in self.usage.items():
             if usage["input_tokens"] > 0 or usage["output_tokens"] > 0:
-                in_cost = usage["input_tokens"] * PRICING[model]["input"]
-                out_cost = usage["output_tokens"] * PRICING[model]["output"]
+                in_cost = usage["input_tokens"] * self.PRICING[model]["input"]
+                out_cost = usage["output_tokens"] * self.PRICING[model]["output"]
                 model_total = in_cost + out_cost
-                total_cost += model_total
-                
-                print(f"Model: {model}")
+                session_cost += model_total
+
+                print(f"Model (This Session): {model}")
                 print(f"  Input Tokens:  {usage['input_tokens']:,} (${in_cost:.6f})")
                 print(f"  Output Tokens: {usage['output_tokens']:,} (${out_cost:.6f})")
-                print(f"  Total Cost:    ${model_total:.6f}")
+                print(f"  Session Cost:  ${model_total:.6f}")
                 print("-" * 50)
-                
-        print(f"TOTAL API COST FOR THIS RUN: ${total_cost:.6f}")
+
+        total_cost_so_far = self.previous_cost_usd + session_cost
+        print(f"TOTAL API COST FOR THIS SESSION: ${session_cost:.6f}")
+        print(f"TOTAL API COST SO FAR:           ${total_cost_so_far:.6f}")
         print("="*50 + "\n")

@@ -63,3 +63,5 @@ class StoryMetadata(TypedDict, total=False):
     paragraphs: List[ProcessedParagraph]
     processed_chunks: List[ProcessedChunkRange]
     characters_merged: Optional[bool]
+    api_usage: Optional[dict]
+    total_cost_usd: Optional[float]

@@ -180,6 +180,8 @@ def run_build(args):
                     metadata["characters"] = other_meta.get("characters", [])
                 else:
                     print(f"Warning: Could not find project {args.import_characters} to import characters.")
+        else:
+            api.load_usage_from_metadata(metadata)
         
         processed_starts = [c["start"] for c in metadata.get("processed_chunks", [])]
         chunks_to_process = [c for c in all_chunks if c["start"] not in processed_starts]
@@ -227,6 +229,7 @@ def run_build(args):
                 metadata["characters_merged"] = False
                 
                 if not dry_run:
+                    api.save_usage_to_metadata(metadata)
                     engine.save_metadata(metadata)
         else:
             print("All text chunks already processed.")
@@ -258,6 +261,7 @@ def run_build(args):
                 else:
                     print("No duplicate characters identified by LLM.")
             metadata["characters_merged"] = True
+            api.save_usage_to_metadata(metadata)
             engine.save_metadata(metadata)
 
         # 2. Generate Audio Chunks
@@ -279,6 +283,8 @@ def run_build(args):
                 if not dry_run:
                     wav_data = pcm_to_wav(pcm_data)
                     engine.save_audio_chunk(p["id"], wav_data)
+                    api.save_usage_to_metadata(metadata)
+                    engine.save_metadata(metadata)
             except Exception as e:
                 failed_tts_ids.append(p["id"])
                 log_pangloss(f"Failed to generate audio for paragraph {p['id']}: {e}")
@@ -288,6 +294,7 @@ def run_build(args):
             print(f"Warning: Failed to generate audio for {len(failed_tts_ids)} paragraph(s): {failed_tts_ids}")
 
         if not dry_run:
+            api.save_usage_to_metadata(metadata)
             engine.save_metadata(metadata)
 
     else:
