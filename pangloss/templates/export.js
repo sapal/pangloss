@@ -115,6 +115,35 @@
             return text;
         }
 
+        function positionTooltip(wordEl) {
+            if (!wordEl || !wordEl.querySelector) return;
+            const tooltip = wordEl.querySelector('.tooltip');
+            if (!tooltip) return;
+            tooltip.style.marginLeft = '0px';
+            if (tooltip.classList) tooltip.classList.remove('tooltip-below');
+
+            const vw = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth : 800;
+            const edgePad = 12;
+            const wordRect = wordEl.getBoundingClientRect ? wordEl.getBoundingClientRect() : { left: 100, right: 160, top: 200, width: 60 };
+            const tipRect = tooltip.getBoundingClientRect ? tooltip.getBoundingClientRect() : { left: 0, right: 0, top: 0, width: 0, height: 0 };
+
+            const tipWidth = tipRect.width > 0 ? tipRect.width : Math.min(300, vw - 2 * edgePad);
+            const tipHeight = tipRect.height > 0 ? tipRect.height : 110;
+            const wordCenterX = wordRect.left + (wordRect.width || (wordRect.right - wordRect.left) || 0) / 2;
+            const tipLeft = tipRect.width > 0 ? tipRect.left : (wordCenterX - tipWidth / 2);
+            const tipRight = tipRect.width > 0 ? tipRect.right : (wordCenterX + tipWidth / 2);
+
+            if (tipLeft < edgePad) {
+                tooltip.style.marginLeft = Math.round(edgePad - tipLeft) + 'px';
+            } else if (tipRight > vw - edgePad) {
+                tooltip.style.marginLeft = Math.round((vw - edgePad) - tipRight) + 'px';
+            }
+
+            if (wordRect.top < tipHeight + 24 || (tipRect.height > 0 && tipRect.top < edgePad)) {
+                if (tooltip.classList) tooltip.classList.add('tooltip-below');
+            }
+        }
+
         function toggleTooltip(e, el) {
             if (e) e.stopPropagation();
             const wasActive = el.classList.contains('active-tooltip');
@@ -123,8 +152,16 @@
             });
             if (!wasActive) {
                 el.classList.add('active-tooltip');
+                positionTooltip(el);
             }
         }
+
+        document.addEventListener('mouseover', function(e) {
+            const wordEl = (e.target && e.target.closest) ? e.target.closest('.word') : null;
+            if (wordEl) {
+                positionTooltip(wordEl);
+            }
+        });
 
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.word')) {

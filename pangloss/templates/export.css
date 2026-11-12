@@ -394,7 +394,8 @@
         .drawer.active { transform: translateX(0); }
         .word { position: relative; border-bottom: 2px solid #5A5A40; cursor: help; display: inline; text-underline-offset: 4px; }
         .word:hover .tooltip, .word.active-tooltip .tooltip { display: block; }
-        .tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translate(-50%, -20px); background: #1A1A1A; color: #F9F7F2; padding: 25px; width: 300px; z-index: 1000; font-size: 0.9rem; font-family: sans-serif; border-radius: 0; box-shadow: 0 15px 45px rgba(0,0,0,0.6); line-height: 1.5; font-style: normal; }
+        .tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translate(-50%, -20px); background: #1A1A1A; color: #F9F7F2; padding: 20px 24px; width: 300px; max-width: calc(100vw - 24px); box-sizing: border-box; z-index: 1000; font-size: 0.9rem; font-family: sans-serif; border-radius: 4px; box-shadow: 0 15px 45px rgba(0,0,0,0.6); line-height: 1.5; font-style: normal; }
+        .tooltip.tooltip-below { bottom: auto; top: 100%; transform: translate(-50%, 16px); }
         .text-content { text-align: justify; }
         .text-content h1 { font-size: 2.5rem; font-weight: 900; font-style: italic; margin-bottom: 1rem; line-height: 1.1; }
         .text-content h2 { font-size: 2rem; font-weight: 800; font-style: italic; margin-bottom: 0.75rem; line-height: 1.2; }

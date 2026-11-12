@@ -1013,6 +1013,119 @@ def test_smart_auto_scroll_detach_and_resume_pill():
     assert data["scrollCallsAfterResume"] >= 1
 
 
+def test_tooltip_viewport_clamping_and_flip():
+    import subprocess
+    from pathlib import Path
+
+    metadata: StoryMetadata = {
+        "title": "Test Story",
+        "characters": [{"name": "Narrator", "description": "N", "voice": "Puck", "voiceProfile": "Calm"}],
+        "difficultWords": [],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "One.",
+                "translatedText": "Eins.",
+                "turns": [{"speaker": "Narrator", "text": "Eins."}]
+            }
+        ]
+    }
+    html_content = generate_html(metadata, {}, "English", "German", "B1")
+    assert "tooltip-below" in html_content
+    assert "max-width: calc(100vw - 24px)" in html_content
+
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'T',
+            paragraphs: [],
+            characters: [],
+            difficultWords: []
+        }))
+        .replace('__AUDIO_DATA_JSON__', '{}')
+        .replace('__PLAY_SVG_JSON__', '""')
+        .replace('__PAUSE_SVG_JSON__', '""')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '""');
+
+    const mockEl = (id, rectFn) => {
+        const classes = new Set();
+        return {
+            id, innerHTML: '', textContent: '', innerText: '', style: {}, dataset: {},
+            getBoundingClientRect: rectFn || (() => ({ left: 100, right: 160, top: 200, bottom: 220, width: 60, height: 20 })),
+            classList: {
+                add(...c){ c.forEach(x => classes.add(x)); },
+                remove(...c){ c.forEach(x => classes.delete(x)); },
+                toggle(x){ classes.has(x) ? classes.delete(x) : classes.add(x); },
+                contains(x){ return classes.has(x); }
+            },
+            addEventListener(){}, appendChild(){}, querySelectorAll(){ return []; },
+            querySelector(){ return null; }, closest(){ return null; }
+        };
+    };
+    const elements = {};
+    const getEl = (id) => {
+        if (!elements[id]) elements[id] = mockEl(id);
+        return elements[id];
+    };
+
+    const sandbox = {
+        document: {
+            getElementById: (id) => getEl(id),
+            querySelector: () => null,
+            querySelectorAll: () => [],
+            addEventListener: () => {},
+            documentElement: mockEl('html')
+        },
+        window: {
+            innerWidth: 360,
+            innerHeight: 640,
+            addEventListener: () => {},
+            location: { hash: '' },
+            matchMedia: () => ({ matches: false })
+        },
+        history: { replaceState(){} },
+        IntersectionObserver: function() { return { observe(){} }; },
+        console
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+
+    // 1. Word near left edge (x=5..45) and top edge (top=10) -> tooltip clamps right (positive marginLeft) and flips below
+    const leftTip = mockEl('tip-left', () => ({ left: -125, right: 175, top: -110, bottom: -10, width: 300, height: 100 }));
+    const leftWord = mockEl('word-left', () => ({ left: 5, right: 45, top: 10, bottom: 30, width: 40, height: 20 }));
+    leftWord.querySelector = (sel) => sel === '.tooltip' ? leftTip : null;
+    sandbox.toggleTooltip({ stopPropagation(){} }, leftWord);
+
+    // 2. Word near right edge (x=320..355) and middle Y (top=300) -> tooltip clamps left (negative marginLeft) and stays above
+    const rightTip = mockEl('tip-right', () => ({ left: 187.5, right: 487.5, top: 180, bottom: 280, width: 300, height: 100 }));
+    const rightWord = mockEl('word-right', () => ({ left: 320, right: 355, top: 300, bottom: 320, width: 35, height: 20 }));
+    rightWord.querySelector = (sel) => sel === '.tooltip' ? rightTip : null;
+    sandbox.toggleTooltip({ stopPropagation(){} }, rightWord);
+
+    console.log(JSON.stringify({
+        leftMargin: parseFloat(leftTip.style.marginLeft || '0'),
+        leftFlippedBelow: leftTip.classList.contains('tooltip-below'),
+        rightMargin: parseFloat(rightTip.style.marginLeft || '0'),
+        rightFlippedBelow: rightTip.classList.contains('tooltip-below')
+    }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    data = json.loads(res.stdout.strip())
+    assert data["leftMargin"] > 0
+    assert data["leftFlippedBelow"] is True
+    assert data["rightMargin"] < 0
+    assert data["rightFlippedBelow"] is False
+
+
 
 if __name__ == "__main__":
     try:
