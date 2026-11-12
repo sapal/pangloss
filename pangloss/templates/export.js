@@ -13,6 +13,7 @@
         const drawerToggle = document.getElementById('drawerToggle');
         const readingModeBtn = document.getElementById('readingModeToggle');
         const readingModeLabel = document.getElementById('readingModeLabel');
+        const themeToggleBtn = document.getElementById('themeToggle');
         const rewindBtn = document.getElementById('rewindBtn');
         const speedBtn = document.getElementById('speedToggle');
         const resumeAutoScrollBtn = document.getElementById('resumeAutoScrollBtn');
@@ -25,6 +26,7 @@
         const PLAYBACK_RATES = [0.75, 0.9, 1.0, 1.25, 1.5];
         let currentPlaybackRate = 1.0;
         const STORAGE_KEY = 'pangloss_progress_' + ((metadata && metadata.title) ? metadata.title : 'default');
+        const THEME_STORAGE_KEY = 'pangloss_theme';
         let restoredAudioTime = 0;
 
         function getStorage() {
@@ -33,6 +35,41 @@
                 if (typeof localStorage !== 'undefined') return localStorage;
             } catch (e) {}
             return null;
+        }
+
+        function getInitialTheme() {
+            const st = getStorage();
+            if (st) {
+                try {
+                    const savedTheme = st.getItem(THEME_STORAGE_KEY);
+                    if (savedTheme === 'dark' || savedTheme === 'light') return savedTheme;
+                } catch (e) {}
+            }
+            if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                return 'dark';
+            }
+            return 'light';
+        }
+
+        let currentTheme = getInitialTheme();
+        function setTheme(theme) {
+            currentTheme = theme;
+            if (document.documentElement && document.documentElement.dataset) {
+                document.documentElement.dataset.theme = theme;
+            }
+            const st = getStorage();
+            if (st) {
+                try {
+                    st.setItem(THEME_STORAGE_KEY, theme);
+                } catch (e) {}
+            }
+        }
+        setTheme(currentTheme);
+
+        if (themeToggleBtn) {
+            themeToggleBtn.onclick = () => {
+                setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+            };
         }
 
         function loadProgressState() {

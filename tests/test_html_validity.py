@@ -1276,6 +1276,118 @@ def test_persistent_playback_position_and_progress_bar():
     assert data["progressWidthSession2"].endswith("%") and float(data["progressWidthSession2"].rstrip("%")) >= 50
 
 
+def test_dark_mode_toggle_and_persistence():
+    import subprocess
+    from pathlib import Path
+
+    metadata: StoryMetadata = {
+        "title": "Test Story",
+        "characters": [{"name": "Narrator", "description": "N", "voice": "Puck", "voiceProfile": "Calm"}],
+        "difficultWords": [],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "One.",
+                "translatedText": "Eins.",
+                "turns": [{"speaker": "Narrator", "text": "Eins."}]
+            }
+        ]
+    }
+    html_content = generate_html(metadata, {}, "English", "German", "B1")
+    assert 'id="themeToggle"' in html_content
+    assert 'data-theme="dark"' in html_content
+
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'T',
+            paragraphs: [],
+            characters: [],
+            difficultWords: []
+        }))
+        .replace('__AUDIO_DATA_JSON__', '{}')
+        .replace('__PLAY_SVG_JSON__', '""')
+        .replace('__PAUSE_SVG_JSON__', '""')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '""');
+
+    const store = {};
+    const localStorageMock = {
+        getItem: (k) => Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null,
+        setItem: (k, v) => { store[k] = String(v); }
+    };
+
+    function createSession() {
+        const mockEl = (id) => {
+            const classes = new Set();
+            return {
+                id, innerHTML: '', textContent: '', innerText: '', style: {}, dataset: {},
+                classList: {
+                    add(...c){ c.forEach(x => classes.add(x)); },
+                    remove(...c){ c.forEach(x => classes.delete(x)); },
+                    toggle(x){ classes.has(x) ? classes.delete(x) : classes.add(x); },
+                    contains(x){ return classes.has(x); }
+                },
+                addEventListener(){}, appendChild(){}, querySelectorAll(){ return []; },
+                querySelector(){ return null; }, closest(){ return null; }
+            };
+        };
+        const elements = {};
+        const getEl = (id) => {
+            if (!elements[id]) elements[id] = mockEl(id);
+            return elements[id];
+        };
+        const docEl = mockEl('html');
+        const sandbox = {
+            document: {
+                getElementById: (id) => getEl(id),
+                querySelector: () => null,
+                querySelectorAll: () => [],
+                addEventListener: () => {},
+                documentElement: docEl
+            },
+            window: {
+                addEventListener: () => {},
+                location: { hash: '' },
+                matchMedia: () => ({ matches: false }),
+                localStorage: localStorageMock
+            },
+            localStorage: localStorageMock,
+            history: { replaceState(){} },
+            IntersectionObserver: function() { return { observe(){} }; },
+            console
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(code, sandbox);
+        return { docEl, getEl };
+    }
+
+    const s1 = createSession();
+    const initialTheme = s1.docEl.dataset.theme;
+    s1.getEl('themeToggle').onclick();
+    const toggledTheme = s1.docEl.dataset.theme;
+
+    // Reloading session restores dark theme from localStorage
+    const s2 = createSession();
+    const restoredTheme = s2.docEl.dataset.theme;
+
+    console.log(JSON.stringify({ initialTheme, toggledTheme, restoredTheme }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    data = json.loads(res.stdout.strip())
+    assert data["initialTheme"] == "light"
+    assert data["toggledTheme"] == "dark"
+    assert data["restoredTheme"] == "dark"
+
+
 
 if __name__ == "__main__":
     try:

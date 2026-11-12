@@ -378,6 +378,39 @@
             --muted: #8C8A81;
             --highlight: rgba(90, 90, 64, 0.1);
         }
+        html[data-theme="dark"] {
+            --paper: #161614;
+            --ink: #E8E4D9;
+            --accent: #A3A375;
+            --muted: #9A968C;
+            --highlight: rgba(163, 163, 117, 0.18);
+        }
+        html[data-theme="dark"] #permanentControls {
+            background-color: #0E0E0C;
+            color: #E8E4D9;
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+        html[data-theme="dark"] #playToggle {
+            background-color: #E8E4D9;
+            color: #161614;
+        }
+        html[data-theme="dark"] .drawer {
+            background-color: #1E1E1B !important;
+            color: #E8E4D9;
+            border-color: rgba(232, 228, 217, 0.12);
+        }
+        html[data-theme="dark"] .word {
+            border-bottom-color: var(--accent);
+        }
+        html[data-theme="dark"] .tooltip {
+            background-color: #262622;
+            color: #F9F7F2;
+            border: 1px solid rgba(163, 163, 117, 0.3);
+        }
+        html[data-theme="dark"] .chunk-target.active-chunk {
+            background-color: rgba(163, 163, 117, 0.22);
+            box-shadow: 0 0 12px 4px rgba(163, 163, 117, 0.18);
+        }
         body { background-color: var(--paper); color: var(--ink); font-family: 'Lora', Georgia, serif; -webkit-font-smoothing: antialiased; height: 100vh; height: 100dvh; display: flex; overflow: hidden; margin: 0; }
         .font-sans { font-family: 'Helvetica Neue', Arial, sans-serif; }
         .text-accent { color: var(--accent); }
