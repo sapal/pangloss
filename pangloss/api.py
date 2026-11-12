@@ -290,9 +290,9 @@ class GeminiAPI:
 
 CRITICAL: 
 - Continue the story exactly from where the previous part left off.
-- MAINTAIN CONSISTENCY: Use the exact same canonical character names for existing characters.
-- DO NOT invent new character names, nicknames, or shortened names for characters that are already in Known Characters (e.g. if 'Harry James Potter-Evans-Verres' is in Known Characters, you MUST use that exact canonical name in dialogue turns, NOT 'Harry' or 'Harry Potter').
-- Always use 'Narrator' as the speaker for narration; NEVER translate it to other languages (such as 'Erzähler').
+- PRESERVE ORIGINAL NAME FORMS IN TRANSLATED TEXT: In "translatedText" and the "text" field of turns, you MUST use the same form of character names as the original text (e.g., if the original text says "Harry", "Draco", or "Severus", translate them as "Harry", "Draco", or "Severus" — NEVER expand them to full canonical names like "Harry James Potter-Evans-Verres", "Draco Malfoy", or "Severus Snape" in the story or dialogue text!).
+- NORMALIZE ONLY THE "speaker" METADATA FIELD: In the JSON "characters" array and the "speaker" field of each turn (and ONLY there), use the canonical character name from Known Characters (e.g. if Known Characters has 'Harry James Potter-Evans-Verres', set `"speaker": "Harry James Potter-Evans-Verres"` even when the text says "said Harry").
+- Always use 'Narrator' as the "speaker" field for narration; NEVER translate 'Narrator' to other languages (such as 'Erzähler').
 - DO NOT repeat words in the "difficultWords" list that are already present in the context above.
 - Identify at least 10 NEW difficult words from this specific chunk.
 """
@@ -319,7 +319,7 @@ Tasks for this chunk:
    Assign a voice name from this list: 
    - Male/Firm/Deep: 'Puck', 'Charon', 'Kore', 'Fenrir', 'Orus', 'Algenib', 'Rasalgethi', 'Alnilam', 'Iapetus', 'Schedar'
    - Female/Bright/Soft: 'Zephyr', 'Aoede', 'Leda', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Despina', 'Erinome', 'Sulafat', 'Pulcherrima'
-3. For each paragraph/segment, provide a list of "turns". A turn is a piece of text spoken by a specific speaker. Narration (even narration between parts of sentence spoken by a character) MUST be assigned to the character "Narrator". If a character has a known canonical name from the context, you MUST use that exact canonical name as the speaker. Concatenating the text of turns MUST give exactly the translated text.
+3. For each paragraph/segment, provide a list of "turns". A turn is a piece of text spoken by a specific speaker. Narration (even narration between parts of sentence spoken by a character) MUST be assigned to the character "Narrator". If a character has a known canonical name from the context, use that canonical name ONLY in the "speaker" field (while keeping the actual translated text in "text" and "translatedText" faithful to the exact name form used in the original text). Concatenating the text of turns MUST give exactly the translated text.
    You may include natural, point-in-time vocal tags in English inside angle brackets within dialogue turns where contextually appropriate, such as <laugh>, <sigh>, <gasp>, <cough>, <throat-clearing>, <whisper>, or <chuckle>.
 4. Extract key vocabulary words from the TRANSLATED text ({target_lang}), explaining them in {source_lang}.
    IMPORTANT (Proficiency Level: {level}): 
