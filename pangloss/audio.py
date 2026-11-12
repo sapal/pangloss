@@ -2,6 +2,7 @@ import wave
 import io
 import subprocess
 import os
+import tempfile
 
 def pcm_to_wav(pcm_data: bytes, sample_rate: int = 24000) -> bytes:
     """Wraps raw PCM data (Linear16, Mono) into a WAV container."""
@@ -48,8 +49,10 @@ def concat_wavs(wav_bytes_list: list[bytes], pause_ms: int = 150, sample_rate: i
 
 def merge_wavs_to_mp3(wav_paths: list[str], output_path: str):
     """Merges multiple WAV files into a single MP3 using FFmpeg."""
-    list_file = "concat_list.txt"
-    with open(list_file, "w") as f:
+    if not wav_paths:
+        return
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        list_file = f.name
         for p in wav_paths:
             # Ensure path is absolute and escaped for ffmpeg
             abs_p = os.path.abspath(p).replace("'", "'\\''")

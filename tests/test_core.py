@@ -335,3 +335,54 @@ def test_process_chunk_with_fallback():
     assert p["turns"] == []
     assert "Atomic copyright paragraph" in p["originalText"]
 
+
+def test_merge_wavs_tempfile_and_mp3_chunk_caching(tmp_path):
+    from pangloss.audio import merge_wavs_to_mp3, pcm_to_wav
+    from pangloss.export import export_results
+
+    wav1 = tmp_path / "1.wav"
+    wav1.write_bytes(pcm_to_wav(b"\x00\x00" * 2400))
+
+    # 1. Verify merge_wavs_to_mp3 uses a tempfile instead of "concat_list.txt" in cwd
+    recorded_args = []
+    def fake_run(cmd, **kwargs):
+        recorded_args.append(cmd)
+        # Ensure concat_list.txt was NOT created in current working directory
+        assert not Path("concat_list.txt").exists()
+        Path(cmd[-1]).write_bytes(b"FAKE_MP3")
+        return MagicMock(returncode=0)
+
+    with patch("pangloss.audio.subprocess.run", side_effect=fake_run):
+        out_mp3 = tmp_path / "out.mp3"
+        merge_wavs_to_mp3([str(wav1)], str(out_mp3))
+        assert len(recorded_args) == 1
+        concat_idx = recorded_args[0].index("-i") + 1
+        concat_file_arg = recorded_args[0][concat_idx]
+        assert concat_file_arg != "concat_list.txt"
+        assert not Path(concat_file_arg).exists()  # cleaned up in finally
+
+    # 2. Verify export_results caches .mp3 chunks in audio_dir and reuses them on subsequent calls
+    meta = {
+        "title": "Cache Test",
+        "characters": [{"name": "Narrator", "description": "N", "voice": "Puck", "voiceProfile": "Calm"}],
+        "difficultWords": [],
+        "paragraphs": [
+            {"id": 1, "originalText": "Hello.", "translatedText": "Hallo.", "turns": [{"speaker": "Narrator", "text": "Hallo."}]}
+        ],
+    }
+    encode_calls = 0
+    def fake_wav_to_mp3(data):
+        nonlocal encode_calls
+        encode_calls += 1
+        return b"ENCODED_MP3_BYTES"
+
+    with patch("pangloss.export.merge_wavs_to_mp3"), patch("pangloss.export.wav_to_mp3_bytes", side_effect=fake_wav_to_mp3):
+        export_results(meta, tmp_path, str(tmp_path / "out"), "English", "German", "B1")
+        assert encode_calls == 1
+        assert (tmp_path / "1.mp3").exists()
+
+        # Second export should reuse cached 1.mp3 without calling wav_to_mp3_bytes again
+        export_results(meta, tmp_path, str(tmp_path / "out"), "English", "German", "B1")
+        assert encode_calls == 1
+
+

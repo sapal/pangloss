@@ -1,4 +1,5 @@
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import string
@@ -6,19 +7,40 @@ from pathlib import Path
 from .audio import wav_to_mp3_bytes, merge_wavs_to_mp3
 from .models import StoryMetadata
 
-def generate_html(metadata: StoryMetadata, audio_chunks: dict, source_lang: str, target_lang: str, level: str) -> str:
+def generate_html(metadata: StoryMetadata, audio_chunks: dict, source_lang: str, target_lang: str, level: str, audio_dir: Path | None = None) -> str:
     """Generates a standalone HTML file with embedded audio and metadata using a template file."""
     
-    # Encode audio to base64 MP3 data URLs
+    # Encode audio to base64 MP3 data URLs (with optional disk caching & parallel encoding)
     mp3_data_urls = {}
-    for pid, wav_data in audio_chunks.items():
+
+    def _encode_one(item):
+        pid, wav_data = item
         try:
-            mp3_bytes = wav_to_mp3_bytes(wav_data)
+            cache_mp3 = (audio_dir / f"{pid}.mp3") if audio_dir is not None else None
+            cache_wav = (audio_dir / f"{pid}.wav") if audio_dir is not None else None
+            if (
+                cache_mp3 is not None
+                and cache_mp3.exists()
+                and (cache_wav is None or not cache_wav.exists() or cache_mp3.stat().st_mtime >= cache_wav.stat().st_mtime)
+            ):
+                mp3_bytes = cache_mp3.read_bytes()
+            else:
+                mp3_bytes = wav_to_mp3_bytes(wav_data)
+                if cache_mp3 is not None:
+                    try:
+                        cache_mp3.write_bytes(mp3_bytes)
+                    except OSError:
+                        pass
             b64_audio = base64.b64encode(mp3_bytes).decode()
-            mp3_data_urls[pid] = f"data:audio/mp3;base64,{b64_audio}"
+            return pid, f"data:audio/mp3;base64,{b64_audio}"
         except Exception as e:
             print(f"Warning: Failed to encode audio for paragraph {pid}: {e}")
-            mp3_data_urls[pid] = ""
+            return pid, ""
+
+    if audio_chunks:
+        with ThreadPoolExecutor() as executor:
+            for pid, data_url in executor.map(_encode_one, audio_chunks.items()):
+                mp3_data_urls[pid] = data_url
 
     # UI Translations
     ui_translations = {
@@ -199,7 +221,7 @@ def export_results(metadata: StoryMetadata, audio_dir: Path, output_dir: str, so
             with open(wav_path, "rb") as f:
                 audio_chunks[pid] = f.read()
     
-    html_content = generate_html(metadata, audio_chunks, source_lang, target_lang, level)
+    html_content = generate_html(metadata, audio_chunks, source_lang, target_lang, level, audio_dir=audio_dir)
     html_output = out_path / f"{title_slug}.html"
     with open(html_output, "w", encoding="utf-8") as f:
         f.write(html_content)
