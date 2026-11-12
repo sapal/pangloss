@@ -56,9 +56,10 @@ class ProcessedChunkRange(TypedDict):
     start: int
     end: int
 
-class StoryMetadata(TypedDict):
+class StoryMetadata(TypedDict, total=False):
     title: str
     characters: List[Character]
     difficultWords: List[DifficultWord]
     paragraphs: List[ProcessedParagraph]
     processed_chunks: List[ProcessedChunkRange]
+    characters_merged: Optional[bool]

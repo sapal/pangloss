@@ -224,12 +224,30 @@ def run_build(args):
                     "start": chunk_info["start"],
                     "end": chunk_info["end"]
                 })
+                metadata["characters_merged"] = False
                 
                 if not dry_run:
                     engine.save_metadata(metadata)
+        else:
+            print("All text chunks already processed.")
+            if dump_requests:
+                for i, chunk_info in enumerate(all_chunks):
+                    api.process_chunk(
+                        chunk_info["text"], args.target_lang, args.level, args.source_lang, 
+                        i == 0, metadata, i, len(all_chunks)
+                    )
 
-            # LLM character deduplication pass after processing text chunks
-            if not dry_run and len(metadata.get("characters", [])) > 1:
+        # LLM character deduplication pass after processing text chunks (or on resume if not yet merged)
+        should_merge_chars = (
+            not dry_run
+            and (
+                bool(chunks_to_process)
+                or not metadata.get("characters_merged")
+                or getattr(args, "merge_characters", False)
+            )
+        )
+        if should_merge_chars:
+            if len(metadata.get("characters", [])) > 1:
                 print("Asking LLM to check characters for any duplicates/merges...")
                 merges = api.find_character_merges_with_llm(metadata.get("characters", []))
                 if merges:
@@ -239,30 +257,13 @@ def run_build(args):
                     apply_character_merges(metadata, merges)
                 else:
                     print("No duplicate characters identified by LLM.")
-                engine.save_metadata(metadata)
-        else:
-            print("All text chunks already processed.")
-            if getattr(args, "merge_characters", False) and not dry_run and len(metadata.get("characters", [])) > 1:
-                print("Running character deduplication pass with LLM...")
-                merges = api.find_character_merges_with_llm(metadata.get("characters", []))
-                if merges:
-                    print(f"LLM identified {len(merges)} character merge group(s):")
-                    for m in merges:
-                        print(f" - Merging {m.get('aliases')} -> {m.get('canonical')}")
-                    apply_character_merges(metadata, merges)
-                    engine.save_metadata(metadata)
-                else:
-                    print("No duplicate characters identified by LLM.")
-            if dump_requests:
-                for i, chunk_info in enumerate(all_chunks):
-                    api.process_chunk(
-                        chunk_info["text"], args.target_lang, args.level, args.source_lang, 
-                        i == 0, metadata, i, len(all_chunks)
-                    )
+            metadata["characters_merged"] = True
+            engine.save_metadata(metadata)
 
         # 2. Generate Audio Chunks
         print("Generating audio chunks...")
         cached_audio_ids = engine.list_cached_audio()
+        failed_tts_ids = []
         
         total_paras = len(metadata["paragraphs"])
         for idx, p in enumerate(metadata["paragraphs"], 1):
@@ -279,8 +280,12 @@ def run_build(args):
                     wav_data = pcm_to_wav(pcm_data)
                     engine.save_audio_chunk(p["id"], wav_data)
             except Exception as e:
+                failed_tts_ids.append(p["id"])
                 log_pangloss(f"Failed to generate audio for paragraph {p['id']}: {e}")
                 print(f"Warning: Skipping paragraph {p['id']} due to error.")
+
+        if failed_tts_ids:
+            print(f"Warning: Failed to generate audio for {len(failed_tts_ids)} paragraph(s): {failed_tts_ids}")
 
         if not dry_run:
             engine.save_metadata(metadata)

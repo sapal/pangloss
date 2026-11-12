@@ -80,5 +80,62 @@ class TestResumability(unittest.TestCase):
         tts_args = mock_api.generate_tts.call_args[0]
         self.assertEqual(tts_args[0]["id"], 2)
 
+    @patch.dict('os.environ', {'GEMINI_API_KEY': 'fake_key'})
+    @patch('pangloss.cli.GeminiAPI')
+    @patch('pangloss.cli.CacheEngine')
+    @patch('builtins.open', new_callable=unittest.mock.mock_open, read_data="Para 1")
+    def test_resume_runs_unmerged_character_dedup_and_reports_failed_tts(self, mock_file, mock_engine_class, mock_api_class):
+        import io
+        from contextlib import redirect_stdout
+
+        mock_engine = mock_engine_class.return_value
+        mock_engine.job_id = "test_job_2"
+        metadata = {
+            "title": "Existing Title",
+            "characters": [
+                {"name": "Harry", "description": "Boy", "voice": "Puck", "voiceProfile": "Young"},
+                {"name": "Harry Potter", "description": "Wizard", "voice": "Fenrir", "voiceProfile": "Calm"}
+            ],
+            "difficultWords": [],
+            "paragraphs": [
+                {"id": 1, "originalText": "Para 1", "translatedText": "Absatz 1", "turns": [{"speaker": "Harry Potter", "text": "Hallo"}]}
+            ],
+            "processed_chunks": [{"start": 0, "end": 6}]
+            # Note: characters_merged is NOT set!
+        }
+        mock_engine.load_metadata.return_value = metadata
+        mock_engine.list_cached_audio.return_value = []
+
+        mock_api = mock_api_class.return_value
+        mock_api.find_character_merges_with_llm.return_value = [
+            {"canonical": "Harry", "aliases": ["Harry Potter"]}
+        ]
+        mock_api.generate_tts.side_effect = RuntimeError("TTS quota exceeded")
+
+        args = argparse.Namespace(
+            filepath="fake.md",
+            target_lang="German",
+            source_lang="English",
+            level="B1",
+            output_dir="./out",
+            render_only=None,
+            import_characters=None,
+            merge_characters=False,
+            serve=False
+        )
+
+        buf = io.StringIO()
+        with patch('pangloss.cli.chunk_text', return_value=[{"text": "Para 1", "start": 0, "end": 6}]), \
+             patch('pangloss.cli.export_results', return_value="fake.html"), \
+             redirect_stdout(buf):
+            run_build(args)
+
+        output = buf.getvalue()
+        mock_api.find_character_merges_with_llm.assert_called_once()
+        self.assertTrue(metadata.get("characters_merged"))
+        self.assertEqual(len(metadata["characters"]), 1)
+        self.assertIn("Failed to generate audio for 1 paragraph(s): [1]", output)
+
+
 if __name__ == "__main__":
     unittest.main()
