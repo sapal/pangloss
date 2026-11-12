@@ -44,7 +44,7 @@
     <!-- Permanent Side/Bottom Control Bar -->
     <div id="permanentControls" class="shadow-[0_-10px_30px_rgba(0,0,0,0.15)] md:shadow-[-10px_0_30px_rgba(0,0,0,0.15)] select-none">
         
-        <!-- Section 1: Brand / Status (Desktop only) -->
+        <!-- Section 1: Brand / Status (Desktop) + Compact Mobile Status -->
         <div class="hidden md:flex flex-col gap-4 w-full border-b border-white/10 pb-6 mb-6">
             <span class="text-[9px] uppercase tracking-[3px] text-accent font-sans font-bold">Pangloss Reader</span>
             <div class="flex flex-col">
@@ -52,6 +52,7 @@
                 <span id="status" class="text-xs font-bold uppercase tracking-[2px] font-sans mt-2 text-paper truncate">${status_ready_label}</span>
             </div>
         </div>
+        <span id="mobileStatus" class="md:hidden text-[10px] font-bold uppercase tracking-[1px] font-sans text-paper/80 truncate mr-1">${status_ready_label}</span>
 
         <!-- Section 2: Player Controls -->
         <div id="playerButtonsContainer" class="flex">
@@ -75,6 +76,7 @@
                         <text x="12" y="15.5" font-size="7.5" font-family="sans-serif" font-weight="bold" text-anchor="middle" fill="currentColor">10</text>
                     </svg>
                 </button>
+                <button class="bg-none border-none text-muted cursor-pointer font-sans text-[10px] font-bold tracking-[1px] transition-colors hover:text-paper flex items-center justify-center px-1.5 py-0.5 rounded border border-white/15" id="speedToggle" title="Playback Speed">1x</button>
                 <button class="bg-none border-none text-muted cursor-pointer font-sans text-[11px] font-bold uppercase tracking-[2px] transition-colors hover:text-paper flex items-center justify-center p-1" id="nextChunkBtn" title="Next Chunk">
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
                 </button>

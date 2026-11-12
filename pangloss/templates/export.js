@@ -4,6 +4,7 @@
         const storyEl = document.getElementById('story');
         const playBtn = document.getElementById('playToggle');
         const statusEl = document.getElementById('status');
+        const mobileStatusEl = document.getElementById('mobileStatus');
         const player = document.getElementById('player');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
@@ -11,10 +12,14 @@
         const overlay = document.getElementById('overlay');
         const drawerToggle = document.getElementById('drawerToggle');
         const rewindBtn = document.getElementById('rewindBtn');
+        const speedBtn = document.getElementById('speedToggle');
         const closeDrawer = document.getElementById('closeDrawer');
         
         const prevChunkBtn = document.getElementById('prevChunkBtn');
         const nextChunkBtn = document.getElementById('nextChunkBtn');
+
+        const PLAYBACK_RATES = [0.75, 0.9, 1.0, 1.25, 1.5];
+        let currentPlaybackRate = 1.0;
 
         let currentId = null;
         let isPlaying = false;
@@ -297,6 +302,22 @@
             };
         }
 
+        function setPlaybackRate(rate) {
+            currentPlaybackRate = rate;
+            if (player) player.playbackRate = currentPlaybackRate;
+            if (speedBtn) {
+                speedBtn.innerText = (currentPlaybackRate === 1 ? '1x' : currentPlaybackRate + 'x');
+            }
+        }
+
+        if (speedBtn) {
+            speedBtn.onclick = () => {
+                const idx = PLAYBACK_RATES.indexOf(currentPlaybackRate);
+                const nextRate = PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length];
+                setPlaybackRate(nextRate);
+            };
+        }
+
         function getActiveChunkInfo() {
             if (currentId === null) return null;
             const p = metadata.paragraphs.find(para => para.id === currentId);
@@ -557,6 +578,7 @@
             if (restart || player.src !== audioData[id]) {
                 player.src = audioData[id];
             }
+            player.playbackRate = currentPlaybackRate;
             currentId = id;
             player.play();
             isPlaying = true;
@@ -601,7 +623,11 @@
                 }
                 const curP = metadata.paragraphs.find(para => para.id === currentId);
                 const isCurUntranslated = curP && curP.untranslated;
-                statusEl.innerText = `__CHAPTER_LABEL__ ` + currentId + (isCurUntranslated ? ' (__OMITTED_BADGE__)' : '');
+                const statusText = `__CHAPTER_LABEL__ ` + currentId + (isCurUntranslated ? ' (__OMITTED_BADGE__)' : '');
+                statusEl.innerText = statusText;
+                if (mobileStatusEl) {
+                    mobileStatusEl.innerText = `#${currentId}/${metadata.paragraphs.length}`;
+                }
                 if (window.location.hash !== '#section-' + currentId) {
                     history.replaceState(null, null, '#section-' + currentId);
                 }
@@ -661,8 +687,32 @@
                 highlightActiveChunk(null);
                 updateUI();
                 statusEl.innerText = '__FINISHED_LABEL__';
+                if (mobileStatusEl) mobileStatusEl.innerText = '__FINISHED_LABEL__';
             }
         };
+
+        document.addEventListener('keydown', (e) => {
+            const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) {
+                return;
+            }
+            if (e.code === 'Space' || e.key === ' ') {
+                e.preventDefault();
+                playBtn.onclick();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevChunk();
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                nextChunk();
+            } else if (e.key === 'Escape') {
+                if (drawer) drawer.classList.remove('active');
+                if (overlay) overlay.classList.remove('opacity-100', 'pointer-events-auto');
+                document.querySelectorAll('.word.active-tooltip').forEach(w => {
+                    w.classList.remove('active-tooltip');
+                });
+            }
+        });
 
         // Initial render for immediate visibility
         render();

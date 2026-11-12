@@ -535,6 +535,158 @@ def test_closing_vocal_tags_and_multichunk_markdown_in_render_trans_row():
     assert "<em>und zweiter Teil</em>" in data["outItalic"]
 
 
+def test_mobile_status_speed_control_and_keyboard_shortcuts():
+    import subprocess
+    from pathlib import Path
+
+    metadata: StoryMetadata = {
+        "title": "Test Story",
+        "characters": [{"name": "Narrator", "description": "N", "voice": "Puck", "voiceProfile": "Calm"}],
+        "difficultWords": [],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "One.",
+                "translatedText": "Eins.",
+                "turns": [{"speaker": "Narrator", "text": "Eins."}],
+                "chunks": [
+                    {"chunk_index": 0, "start_sec": 0.0, "end_sec": 2.0, "start_char": 0, "end_char": 5, "speakers": ["Narrator"]}
+                ]
+            },
+            {
+                "id": 2,
+                "originalText": "Two.",
+                "translatedText": "Zwei.",
+                "turns": [{"speaker": "Narrator", "text": "Zwei."}],
+                "chunks": [
+                    {"chunk_index": 0, "start_sec": 0.0, "end_sec": 2.0, "start_char": 0, "end_char": 5, "speakers": ["Narrator"]}
+                ]
+            }
+        ]
+    }
+    html_content = generate_html(metadata, {}, "English", "German", "B1")
+    assert 'id="speedToggle"' in html_content
+    assert 'id="mobileStatus"' in html_content
+
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'T',
+            paragraphs: [
+                {id: 1, originalText: 'One.', translatedText: 'Eins.', turns: [{speaker: 'Narrator', text: 'Eins.'}], chunks: [{chunk_index: 0, start_sec: 0, end_sec: 2, start_char: 0, end_char: 5, speakers: ['Narrator']}]},
+                {id: 2, originalText: 'Two.', translatedText: 'Zwei.', turns: [{speaker: 'Narrator', text: 'Zwei.'}], chunks: [{chunk_index: 0, start_sec: 0, end_sec: 2, start_char: 0, end_char: 5, speakers: ['Narrator']}]}
+            ],
+            characters: [],
+            difficultWords: []
+        }))
+        .replace('__AUDIO_DATA_JSON__', JSON.stringify({1: 'data:audio/mp3;base64,AAA', 2: 'data:audio/mp3;base64,BBB'}))
+        .replace('__PLAY_SVG_JSON__', '"PLAY"')
+        .replace('__PAUSE_SVG_JSON__', '"PAUSE"')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '"Paragraph"');
+
+    const docListeners = {};
+    const mockEl = (id) => {
+        const classes = new Set();
+        let _src = '';
+        return {
+            id, innerHTML: '', textContent: '', innerText: '', style: {}, dataset: {},
+            currentTime: 0, playbackRate: 1.0,
+            get src() { return _src; },
+            set src(v) { _src = v; this.playbackRate = 1.0; }, // HTMLAudioElement resets playbackRate when src changes!
+            play(){}, pause(){},
+            classList: {
+                add(...c){ c.forEach(x => classes.add(x)); },
+                remove(...c){ c.forEach(x => classes.delete(x)); },
+                toggle(x){ classes.has(x) ? classes.delete(x) : classes.add(x); },
+                contains(x){ return classes.has(x); }
+            },
+            addEventListener(){}, appendChild(){}, querySelectorAll(){ return []; },
+            closest(){ return null; }
+        };
+    };
+    const elements = {};
+    const getEl = (id) => {
+        if (!elements[id]) elements[id] = mockEl(id);
+        return elements[id];
+    };
+
+    const sandbox = {
+        document: {
+            getElementById: (id) => getEl(id),
+            querySelector: () => null,
+            querySelectorAll: () => [],
+            addEventListener: (evt, fn) => {
+                if (!docListeners[evt]) docListeners[evt] = [];
+                docListeners[evt].push(fn);
+            },
+            documentElement: mockEl('html')
+        },
+        window: {
+            addEventListener: () => {},
+            location: { hash: '' },
+            matchMedia: () => ({ matches: false })
+        },
+        history: { replaceState(){} },
+        IntersectionObserver: function() { return { observe(){} }; },
+        console
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+
+    // 1. Speed toggle cycling & persistence across playPara (which resets player.src)
+    getEl('speedToggle').onclick();
+    const rateAfterFirstClick = getEl('player').playbackRate;
+    const labelAfterFirstClick = getEl('speedToggle').innerText;
+    sandbox.playPara(1, true);
+    const rateAfterPlayPara = getEl('player').playbackRate;
+    const mobileStatusText = getEl('mobileStatus').innerText;
+
+    // 2. Keyboard shortcuts: Space pauses, ArrowRight advances to para 2, Escape closes drawer
+    const keydown = (key, code, tagName = 'BODY') => {
+        (docListeners['keydown'] || []).forEach(fn => fn({
+            key, code, target: { tagName }, preventDefault(){}
+        }));
+    };
+    keydown(' ', 'Space');
+    const playingAfterSpace = sandbox.eval ? false : getEl('playToggle').innerHTML === 'PAUSE';
+    keydown('ArrowRight', 'ArrowRight');
+    const idAfterRight = getEl('mobileStatus').innerText;
+
+    getEl('drawer').classList.add('active');
+    keydown('Escape', 'Escape');
+    const drawerActiveAfterEsc = getEl('drawer').classList.contains('active');
+
+    console.log(JSON.stringify({
+        rateAfterFirstClick,
+        labelAfterFirstClick,
+        rateAfterPlayPara,
+        mobileStatusText,
+        playingAfterSpace,
+        idAfterRight,
+        drawerActiveAfterEsc
+    }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    data = json.loads(res.stdout.strip())
+    assert data["rateAfterFirstClick"] == 1.25
+    assert data["labelAfterFirstClick"] == "1.25x"
+    assert data["rateAfterPlayPara"] == 1.25
+    assert "1" in data["mobileStatusText"]
+    assert data["playingAfterSpace"] is False
+    assert "2" in data["idAfterRight"]
+    assert data["drawerActiveAfterEsc"] is False
+
+
+
 
 
 
