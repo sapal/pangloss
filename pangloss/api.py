@@ -11,6 +11,7 @@ from .models import (
 )
 from .utils import retry_with_pangloss
 from .audio import concat_wavs, get_wav_duration_ms
+from .characters import NARRATOR_NAMES
 
 def to_dict(obj):
     if obj is None:
@@ -53,8 +54,11 @@ def count_sentences(text: str) -> int:
     sentences = re.split(r'(?<=[.!?])\s+', text.strip())
     return len([s for s in sentences if any(c.isalnum() for c in s)])
 
+def is_narrator(speaker: str) -> bool:
+    return bool(speaker and speaker.strip().lower() in NARRATOR_NAMES)
+
 def split_turn_by_sentences(turn: dict, max_sentences: int = 3) -> list[dict]:
-    if turn.get("speaker", "").lower() != "narrator":
+    if not is_narrator(turn.get("speaker", "")):
         return [turn]
     text = turn.get("text", "").strip()
     sentences = re.split(r'(?<=[.!?])\s+', text)
@@ -83,12 +87,12 @@ def partition_paragraph_into_subchunks(turns: list[dict], max_narrator_solo_sent
         speaker = t["speaker"]
         s_count = count_sentences(t.get("text", ""))
         
-        # If current chunk is strictly solo narrator, check if adding would exceed 3 sentences
-        if current_speakers == {"Narrator"} and speaker == "Narrator":
+        # If current chunk is strictly solo narrator, check if adding would exceed max_narrator_solo_sentences
+        if len(current_speakers) == 1 and all(is_narrator(s) for s in current_speakers) and is_narrator(speaker):
             if solo_narrator_sentences + s_count > max_narrator_solo_sentences:
                 sub_chunks.append(current_chunk)
                 current_chunk = [t]
-                current_speakers = {"Narrator"}
+                current_speakers = {speaker}
                 solo_narrator_sentences = s_count
                 continue
                 
@@ -96,7 +100,7 @@ def partition_paragraph_into_subchunks(turns: list[dict], max_narrator_solo_sent
         if len(new_speakers) <= 2:
             current_chunk.append(t)
             current_speakers = new_speakers
-            if current_speakers == {"Narrator"}:
+            if len(current_speakers) == 1 and all(is_narrator(s) for s in current_speakers):
                 solo_narrator_sentences += s_count
             else:
                 solo_narrator_sentences = 0
@@ -105,7 +109,7 @@ def partition_paragraph_into_subchunks(turns: list[dict], max_narrator_solo_sent
                 sub_chunks.append(current_chunk)
             current_chunk = [t]
             current_speakers = {speaker}
-            solo_narrator_sentences = s_count if speaker == "Narrator" else 0
+            solo_narrator_sentences = s_count if is_narrator(speaker) else 0
             
     if current_chunk:
         sub_chunks.append(current_chunk)

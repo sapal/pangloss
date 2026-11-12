@@ -386,3 +386,18 @@ def test_merge_wavs_tempfile_and_mp3_chunk_caching(tmp_path):
         assert encode_calls == 1
 
 
+def test_partition_narrator_case_and_alias_insensitive():
+    # 1. Multiple solo turns with lowercase "narrator"
+    turns_lower = [{"speaker": "narrator", "text": f"Sentence {i}."} for i in range(1, 10)]
+    chunks_lower = partition_paragraph_into_subchunks(turns_lower, max_narrator_solo_sentences=3)
+    assert len(chunks_lower) == 3
+    assert all(len(c) == 3 for c in chunks_lower)
+
+    # 2. Single 9-sentence turn with "Erzähler"
+    long_erzaehler = [{"speaker": "Erzähler", "text": " ".join(f"Satz {i}." for i in range(1, 10))}]
+    chunks_de = partition_paragraph_into_subchunks(long_erzaehler, max_narrator_solo_sentences=3)
+    assert len(chunks_de) == 3
+    assert all(len(c) == 1 for c in chunks_de)
+
+
+
