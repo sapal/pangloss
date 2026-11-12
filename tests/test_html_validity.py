@@ -353,6 +353,104 @@ def test_single_initial_render_and_intersection_observer_config():
     assert data["rootMargin"] == "-40% 0px -40% 0px"
 
 
+def test_original_text_click_and_text_selection_do_not_restart_audio():
+    import subprocess
+    from pathlib import Path
+
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'T',
+            paragraphs: [{
+                id: 1,
+                originalText: 'Original text here.',
+                translatedText: 'Übersetzter Text hier.',
+                turns: [{speaker: 'Narrator', text: 'Übersetzter Text hier.'}],
+                chunks: [{chunk_index: 0, start_sec: 0, end_sec: 5, start_char: 0, end_char: 22, speakers: ['Narrator']}]
+            }],
+            characters: [],
+            difficultWords: []
+        }))
+        .replace('__AUDIO_DATA_JSON__', JSON.stringify({1: 'data:audio/mp3;base64,AAAA'}))
+        .replace('__PLAY_SVG_JSON__', '""')
+        .replace('__PAUSE_SVG_JSON__', '""')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '""');
+
+    let selectionText = '';
+    const mockEl = (id) => ({
+        id, innerHTML: '', textContent: '', innerText: '', style: {}, dataset: {},
+        currentTime: 0, src: '',
+        play(){}, pause(){},
+        classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
+        addEventListener(){}, appendChild(){}, querySelectorAll(){ return []; },
+        closest(){ return null; }
+    });
+    const elements = {};
+    const getEl = (id) => {
+        if (!elements[id]) elements[id] = mockEl(id);
+        return elements[id];
+    };
+
+    const sandbox = {
+        document: {
+            getElementById: (id) => getEl(id),
+            querySelector: () => null,
+            querySelectorAll: () => [],
+            addEventListener: () => {},
+            documentElement: mockEl('html')
+        },
+        window: {
+            addEventListener: () => {},
+            location: { hash: '' },
+            matchMedia: () => ({ matches: false }),
+            getSelection: () => ({ toString: () => selectionText })
+        },
+        history: { replaceState(){} },
+        IntersectionObserver: function() { return { observe(){} }; },
+        console
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+
+    const storyHtml = getEl('story').innerHTML;
+    // 1. Start playing paragraph 1 and advance currentTime to 3.2s
+    sandbox.playPara(1, true);
+    getEl('player').currentTime = 3.2;
+
+    // 2. Simulate selecting text and calling seekToChunk -> must NOT change currentTime!
+    selectionText = 'Übersetzter';
+    sandbox.seekToChunk({ stopPropagation(){} }, 1, 0);
+    const timeAfterSelectedClick = getEl('player').currentTime;
+
+    // 3. Clear selection and call seekToChunk -> MUST seek to 0
+    selectionText = '';
+    sandbox.seekToChunk({ stopPropagation(){} }, 1, 0);
+    const timeAfterNormalSeek = getEl('player').currentTime;
+
+    console.log(JSON.stringify({
+        storyHtml,
+        timeAfterSelectedClick,
+        timeAfterNormalSeek
+    }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    data = json.loads(res.stdout.strip())
+    # Outer container #trans-1 (which wraps orig-1-0) must NOT have onclick="playPara(1)"
+    assert 'id="trans-1" onclick="playPara(1)"' not in data["storyHtml"]
+    assert data["timeAfterSelectedClick"] == 3.2
+    assert data["timeAfterNormalSeek"] == 0
+
+
+
 
 
 if __name__ == "__main__":

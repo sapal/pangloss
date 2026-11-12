@@ -158,7 +158,7 @@
                                     __OMITTED_BADGE__
                                 </span>
                             </div>
-                            <div id="trans-${p.id}" onclick="playPara(${p.id})" class="cursor-pointer rounded-2xl p-6 md:p-8 bg-amber-500/5 border-2 border-dashed border-amber-500/30">
+                            <div id="trans-${p.id}" class="rounded-2xl p-6 md:p-8 bg-amber-500/5 border-2 border-dashed border-amber-500/30">
                                 <div class="flex items-start gap-4 mb-4">
                                     <div class="p-2 rounded-lg bg-amber-500/15 text-amber-800 flex-shrink-0 mt-0.5">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -206,7 +206,7 @@
                     return `
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-start mb-8 last:mb-0">
                             <div id="orig-${p.id}-${i}" class="text-base md:text-xl leading-relaxed font-serif opacity-70 transition-all duration-300 text-content">${md(origPara)}</div>
-                            <div id="trans-${p.id}-${i}" class="text-base md:text-xl leading-relaxed font-serif transition-all duration-300 text-content">${renderedTrans}</div>
+                            <div id="trans-${p.id}-${i}" onclick="handleTransClick(event, ${p.id})" class="text-base md:text-xl leading-relaxed font-serif transition-all duration-300 text-content cursor-pointer">${renderedTrans}</div>
                         </div>
                     `;
                 }).join('');
@@ -221,7 +221,7 @@
                             </button>
                             ` : ''}
                         </div>
-                        <div id="trans-${p.id}" onclick="playPara(${p.id})" class="cursor-pointer">
+                        <div id="trans-${p.id}">
                             ${alignedContent}
                         </div>
                     </div>
@@ -396,8 +396,21 @@
             return false;
         }
 
+        function hasTextSelection() {
+            return Boolean(window.getSelection && window.getSelection().toString().trim().length > 0);
+        }
+
+        function handleTransClick(e, paraId) {
+            if (hasTextSelection()) return;
+            if (e && e.target && e.target.closest && e.target.closest('.word, .chunk-target')) return;
+            if (currentId !== paraId || !isPlaying) {
+                playPara(paraId, currentId !== paraId);
+            }
+        }
+
         function seekToChunk(e, paraId, chunkIdx) {
             if (e) e.stopPropagation();
+            if (hasTextSelection()) return;
             if (currentId !== paraId) {
                 playPara(paraId, true);
             }
