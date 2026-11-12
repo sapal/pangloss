@@ -1126,6 +1126,156 @@ def test_tooltip_viewport_clamping_and_flip():
     assert data["rightFlippedBelow"] is False
 
 
+def test_persistent_playback_position_and_progress_bar():
+    import subprocess
+    from pathlib import Path
+
+    metadata: StoryMetadata = {
+        "title": "Teapot Story",
+        "characters": [{"name": "Narrator", "description": "N", "voice": "Puck", "voiceProfile": "Calm"}],
+        "difficultWords": [],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "One.",
+                "translatedText": "Eins.",
+                "turns": [{"speaker": "Narrator", "text": "Eins."}],
+                "chunks": [{"chunk_index": 0, "start_sec": 0.0, "end_sec": 4.0, "start_char": 0, "end_char": 5, "speakers": ["Narrator"]}]
+            },
+            {
+                "id": 2,
+                "originalText": "Two.",
+                "translatedText": "Zwei.",
+                "turns": [{"speaker": "Narrator", "text": "Zwei."}],
+                "chunks": [{"chunk_index": 0, "start_sec": 0.0, "end_sec": 4.0, "start_char": 0, "end_char": 5, "speakers": ["Narrator"]}]
+            }
+        ]
+    }
+    html_content = generate_html(metadata, {}, "English", "German", "B1")
+    assert 'id="chapterProgressBar"' in html_content
+
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'Teapot Story',
+            paragraphs: [
+                {id: 1, originalText: 'One.', translatedText: 'Eins.', turns: [{speaker: 'Narrator', text: 'Eins.'}], chunks: [{chunk_index: 0, start_sec: 0, end_sec: 4, start_char: 0, end_char: 5, speakers: ['Narrator']}]},
+                {id: 2, originalText: 'Two.', translatedText: 'Zwei.', turns: [{speaker: 'Narrator', text: 'Zwei.'}], chunks: [{chunk_index: 0, start_sec: 0, end_sec: 4, start_char: 0, end_char: 5, speakers: ['Narrator']}]}
+            ],
+            characters: [],
+            difficultWords: []
+        }))
+        .replace('__AUDIO_DATA_JSON__', JSON.stringify({1: 'data:audio/mp3;base64,AAA', 2: 'data:audio/mp3;base64,BBB'}))
+        .replace('__PLAY_SVG_JSON__', '"PLAY"')
+        .replace('__PAUSE_SVG_JSON__', '"PAUSE"')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '"Paragraph"');
+
+    const store = {};
+    const localStorageMock = {
+        getItem: (k) => Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null,
+        setItem: (k, v) => { store[k] = String(v); }
+    };
+
+    function createSession() {
+        const winListeners = {};
+        const mockEl = (id) => {
+            const classes = new Set();
+            const listeners = {};
+            return {
+                id, innerHTML: '', textContent: '', innerText: '', style: {}, dataset: {},
+                currentTime: 0, duration: 4.0, playbackRate: 1.0, src: '',
+                clientHeight: 600, scrollTop: 0,
+                play(){}, pause(){}, scrollTo(){},
+                getBoundingClientRect(){ return { top: 0, height: 40, left: 0, right: 100 }; },
+                classList: {
+                    add(...c){ c.forEach(x => classes.add(x)); },
+                    remove(...c){ c.forEach(x => classes.delete(x)); },
+                    toggle(x){ classes.has(x) ? classes.delete(x) : classes.add(x); },
+                    contains(x){ return classes.has(x); }
+                },
+                addEventListener(evt, fn){
+                    if (!listeners[evt]) listeners[evt] = [];
+                    listeners[evt].push(fn);
+                },
+                trigger(evt, e = {}){
+                    (listeners[evt] || []).forEach(fn => fn(e));
+                },
+                appendChild(){}, querySelectorAll(){ return []; },
+                querySelector(){ return null; }, closest(){ return null; }
+            };
+        };
+        const elements = {};
+        const getEl = (id) => {
+            if (!elements[id]) elements[id] = mockEl(id);
+            return elements[id];
+        };
+        const sandbox = {
+            document: {
+                getElementById: (id) => getEl(id),
+                querySelector: () => null,
+                querySelectorAll: () => [],
+                addEventListener: () => {},
+                documentElement: mockEl('html')
+            },
+            window: {
+                addEventListener: (evt, fn) => {
+                    if (!winListeners[evt]) winListeners[evt] = [];
+                    winListeners[evt].push(fn);
+                },
+                location: { hash: '' },
+                matchMedia: () => ({ matches: false }),
+                localStorage: localStorageMock
+            },
+            localStorage: localStorageMock,
+            history: { replaceState(){} },
+            IntersectionObserver: function() { return { observe(){} }; },
+            Date: { now: () => 10000 },
+            console
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(code, sandbox);
+        (winListeners['load'] || []).forEach(fn => fn());
+        return { sandbox, getEl };
+    }
+
+    // Session 1: play paragraph 2 at 1.25x speed and time=2.0s -> saves state & updates progress bar
+    const s1 = createSession();
+    s1.getEl('speedToggle').onclick(); // 1.25x
+    s1.sandbox.playPara(2, true);
+    s1.getEl('player').currentTime = 2.0;
+    s1.getEl('player').trigger('timeupdate', {});
+    const progressWidthSession1 = s1.getEl('chapterProgressBar').style.width;
+
+    // Session 2: fresh reload with no URL hash -> restores paragraph 2 and 1.25x speed from localStorage
+    const s2 = createSession();
+    const restoredStatus = s2.getEl('mobileStatus').innerText;
+    const restoredSpeedLabel = s2.getEl('speedToggle').innerText;
+    const progressWidthSession2 = s2.getEl('chapterProgressBar').style.width;
+
+    console.log(JSON.stringify({
+        progressWidthSession1,
+        restoredStatus,
+        restoredSpeedLabel,
+        progressWidthSession2
+    }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    data = json.loads(res.stdout.strip())
+    assert data["progressWidthSession1"].endswith("%") and float(data["progressWidthSession1"].rstrip("%")) > 50
+    assert "#2/2" in data["restoredStatus"]
+    assert data["restoredSpeedLabel"] == "1.25x"
+    assert data["progressWidthSession2"].endswith("%") and float(data["progressWidthSession2"].rstrip("%")) >= 50
+
+
 
 if __name__ == "__main__":
     try:

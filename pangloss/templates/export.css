@@ -412,10 +412,27 @@
         }
 
         #permanentControls {
+            position: relative;
             display: flex;
             background-color: var(--ink);
             color: var(--paper);
             border-color: rgba(255, 255, 255, 0.1);
+        }
+        .chapter-progress-track {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background-color: rgba(255, 255, 255, 0.12);
+            overflow: hidden;
+            pointer-events: none;
+        }
+        .chapter-progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #A3A375;
+            transition: width 0.25s ease;
         }
 
         /* Default (Mobile Portrait) layout */

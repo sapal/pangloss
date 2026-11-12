@@ -16,6 +16,7 @@
         const rewindBtn = document.getElementById('rewindBtn');
         const speedBtn = document.getElementById('speedToggle');
         const resumeAutoScrollBtn = document.getElementById('resumeAutoScrollBtn');
+        const chapterProgressBar = document.getElementById('chapterProgressBar');
         const closeDrawer = document.getElementById('closeDrawer');
         
         const prevChunkBtn = document.getElementById('prevChunkBtn');
@@ -23,6 +24,61 @@
 
         const PLAYBACK_RATES = [0.75, 0.9, 1.0, 1.25, 1.5];
         let currentPlaybackRate = 1.0;
+        const STORAGE_KEY = 'pangloss_progress_' + ((metadata && metadata.title) ? metadata.title : 'default');
+        let restoredAudioTime = 0;
+
+        function getStorage() {
+            try {
+                if (typeof window !== 'undefined' && window.localStorage) return window.localStorage;
+                if (typeof localStorage !== 'undefined') return localStorage;
+            } catch (e) {}
+            return null;
+        }
+
+        function loadProgressState() {
+            const st = getStorage();
+            if (!st) return null;
+            try {
+                const raw = st.getItem(STORAGE_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function saveProgressState() {
+            const st = getStorage();
+            if (!st) return;
+            try {
+                st.setItem(STORAGE_KEY, JSON.stringify({
+                    currentId,
+                    currentTime: (player && player.currentTime) ? player.currentTime : restoredAudioTime,
+                    playbackRate: currentPlaybackRate,
+                    readingMode
+                }));
+            } catch (e) {}
+        }
+
+        function updateProgressBar() {
+            if (!chapterProgressBar || !metadata.paragraphs || metadata.paragraphs.length === 0) return;
+            if (currentId === null) {
+                chapterProgressBar.style.width = '0%';
+                return;
+            }
+            const idx = metadata.paragraphs.findIndex(p => p.id === currentId);
+            if (idx === -1) return;
+            let subFraction = 0.5;
+            if (player && player.duration > 0) {
+                subFraction = Math.max(0, Math.min(1, player.currentTime / player.duration));
+            } else if (metadata.paragraphs[idx].chunks && metadata.paragraphs[idx].chunks.length > 0) {
+                const chunks = metadata.paragraphs[idx].chunks;
+                const totalDur = chunks[chunks.length - 1].end_sec || 1;
+                const t = (player && player.currentTime) ? player.currentTime : restoredAudioTime;
+                subFraction = Math.max(0, Math.min(1, t / totalDur));
+            }
+            const pct = Math.max(0, Math.min(100, ((idx + Math.max(0.05, subFraction)) / metadata.paragraphs.length) * 100));
+            chapterProgressBar.style.width = pct.toFixed(1) + '%';
+        }
 
         function getDefaultReadingMode() {
             if (window.matchMedia && window.matchMedia('(max-width: 767px) and (orientation: portrait)').matches) {
@@ -409,12 +465,13 @@
             };
         }
 
-        function setPlaybackRate(rate) {
+        function setPlaybackRate(rate, save = true) {
             currentPlaybackRate = rate;
             if (player) player.playbackRate = currentPlaybackRate;
             if (speedBtn) {
                 speedBtn.innerText = (currentPlaybackRate === 1 ? '1x' : currentPlaybackRate + 'x');
             }
+            if (save) saveProgressState();
         }
 
         if (speedBtn) {
@@ -716,6 +773,9 @@
         player.addEventListener('timeupdate', () => {
             if (!isPlaying || currentId === null) return;
 
+            updateProgressBar();
+            saveProgressState();
+
             const info = getActiveChunkInfo();
             if (info) {
                 highlightActiveChunk(info.chunkIndex);
@@ -817,6 +877,8 @@
                 highlightActiveChunk(null);
             }
             playBtn.innerHTML = isPlaying ? PAUSE_SVG : PLAY_SVG;
+            updateProgressBar();
+            saveProgressState();
             
             const index = metadata.paragraphs.findIndex(p => p.id === currentId);
             prevBtn.disabled = index <= 0;
@@ -899,6 +961,12 @@
             }
         });
 
+        // Restore persisted playback rate immediately if available
+        const initialSavedState = loadProgressState();
+        if (initialSavedState && typeof initialSavedState.playbackRate === 'number' && PLAYBACK_RATES.includes(initialSavedState.playbackRate)) {
+            setPlaybackRate(initialSavedState.playbackRate, false);
+        }
+
         // Initial render for immediate visibility
         render();
 
@@ -907,6 +975,14 @@
           if (hash.startsWith('#section-')) {
               const id = parseInt(hash.replace('#section-', ''));
               if (!isNaN(id)) currentId = id;
+          } else {
+              const saved = loadProgressState();
+              if (saved && saved.currentId !== null && saved.currentId !== undefined) {
+                  if (metadata.paragraphs.some(p => p.id === saved.currentId)) {
+                      currentId = saved.currentId;
+                      restoredAudioTime = saved.currentTime || 0;
+                  }
+              }
           }
           updateUI(true);
         });
