@@ -59,6 +59,16 @@
             }
         });
 
+        function escapeHtml(str) {
+            if (!str) return "";
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
         function applyWords(html, sortedWords) {
             if (!html || !sortedWords || sortedWords.length === 0) return html;
             let result = html;
@@ -73,12 +83,15 @@
             sortedWords.forEach(dw => {
                 const anchors = dw.anchors || [dw.word];
                 const sortedAnchors = [...anchors].sort((a, b) => b.length - a.length);
+                const safeWord = escapeHtml(dw.word);
+                const safeExplanation = escapeHtml(dw.explanation);
                 sortedAnchors.forEach(anchor => {
-                    const escaped = anchor.replace(/[.*+?^${}()[\]\\]/g, '\\$&');
-                    const regex = new RegExp("\\b" + escaped + "\\b", 'gi');
+                    if (!anchor) return;
+                    const escaped = anchor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp("(?<![\\p{L}\\p{N}_])" + escaped + "(?![\\p{L}\\p{N}_])", 'giu');
                     result = result.replace(regex, (match) => {
                         const idx = wordPlaceholders.length;
-                        const tooltipHtml = `<span class="word" onclick="toggleTooltip(event, this)">${match}<div class="tooltip" onclick="event.stopPropagation()"><strong>${dw.word}</strong>: ${dw.explanation}</div></span>`;
+                        const tooltipHtml = `<span class="word" onclick="toggleTooltip(event, this)">${match}<div class="tooltip" onclick="event.stopPropagation()"><strong>${safeWord}</strong>: ${safeExplanation}</div></span>`;
                         wordPlaceholders.push(tooltipHtml);
                         return `\uE000WORD_${idx}_\uE001`;
                     });
