@@ -161,14 +161,16 @@ def compute_chunk_ranges(sub_chunks: list[list[dict]], translated_text: str) -> 
         probe_words = [w for w in re.findall(r'[\w\'-]+|[„“\"\'»«]', next_text) if any(c.isalnum() for c in w)]
         found_idx = -1
         if probe_words:
-            sub_probe = ' '.join(probe_words[:2]) if len(probe_words) >= 2 else probe_words[0]
-            esc = re.escape(sub_probe)
-            pattern = esc.replace(r'\ ', r'\s+')
-            window_start = max(0, pos)
-            matches = [m.start() for m in re.finditer(pattern, translated_text[window_start:])]
+            escaped_words = [re.escape(w) for w in probe_words[:2]]
+            pattern = r'[\s,.;:!?„“"\'»«—–\-*]+'.join(escaped_words)
+            window_start = max(pos, expected_pos - 160)
+            window_end = min(len(translated_text), expected_pos + 160)
+            matches = [m.start() for m in re.finditer(pattern, translated_text[window_start:window_end])]
             if matches:
                 best = min(matches, key=lambda m: abs((window_start + m) - expected_pos))
                 found_idx = window_start + best
+                while found_idx > pos and translated_text[found_idx - 1] in '„“"\'»«*#':
+                    found_idx -= 1
 
         if found_idx != -1:
             boundary = found_idx

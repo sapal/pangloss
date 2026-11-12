@@ -400,4 +400,160 @@ def test_partition_narrator_case_and_alias_insensitive():
     assert all(len(c) == 1 for c in chunks_de)
 
 
+def test_chunk_highlight_sync_and_proportional_wav_durations(tmp_path):
+    from pangloss.api import compute_chunk_ranges
+    from pangloss.export import ensure_chunk_metadata
+    from pangloss.audio import pcm_to_wav
+
+    # 1. Punctuation between probe words ("„Es, tut mir leid“") must match first occurrence,
+    # not jump to a later sentence ("„Es tut mir leid, dass...“") in the next sub-paragraph!
+    translated_text = (
+        "Vor ihr stand ein Kind.\n\n"
+        "„Es, tut mir leid“, flüsterte er mit brüchiger Stimme. „Es tut mir leid, dass ich Sie enttäuscht habe.“"
+    )
+    sub_chunks = [
+        [{"speaker": "Narrator", "text": "Vor ihr stand ein Kind.\n\n"}],
+        [{"speaker": "Harry", "text": "<whisper>„Es, tut mir leid“,</whisper> flüsterte er mit brüchiger Stimme. „Es tut mir leid, dass ich Sie enttäuscht habe.“"}],
+    ]
+    ranges = compute_chunk_ranges(sub_chunks, translated_text)
+    assert ranges[0] == (0, 25)
+    assert translated_text[ranges[1][0]:].startswith("„Es, tut mir leid“")
+
+    # 2. When a WAV file has 1 continuous stream (or != len(sub_chunks) silence parts) of 60s
+    # and saved p["chunks"] had only 1 chunk (or None), ensure_chunk_metadata must distribute
+    # the 60s proportionally across all sub_chunks instead of using 5.0s fallback or leaving stale 1-chunk list.
+    wav_60s = pcm_to_wav(b"\x01\x00" * (24000 * 60), sample_rate=24000)
+    (tmp_path / "1.wav").write_bytes(wav_60s)
+
+    meta = {
+        "title": "Sync Test",
+        "characters": [],
+        "difficultWords": [],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "Part 1.\n\nPart 2.",
+                "translatedText": "Erster Teil ist zwanzig.\n\nZweiter Teil ist genauso.",
+                "turns": [
+                    {"speaker": "Arthur", "text": "Erster Teil ist zwanzig.\n\n"},
+                    {"speaker": "Elara", "text": "Part 1b."},
+                    {"speaker": "Inspector Barnes", "text": "Zweiter Teil ist genauso."},
+                ],
+                # Stale 1-chunk metadata from before sub-chunking changed
+                "chunks": [
+                    {"chunk_index": 0, "start_sec": 0.0, "end_sec": 60.0, "start_char": 0, "end_char": 51, "speakers": ["Arthur"]}
+                ],
+            }
+        ],
+    }
+    ensure_chunk_metadata(meta, tmp_path)
+    chunks = meta["paragraphs"][0]["chunks"]
+    assert len(chunks) == 2
+    assert chunks[0]["end_sec"] > 15.0  # Not 5.0s fallback!
+    assert abs(chunks[-1]["end_sec"] - 60.0) < 1.0
+
+    # 3. When a single chunk spans across multiple sub-paragraphs (.chunk-p1-c0 in both row 0 and row 1),
+    # highlightActiveChunk should highlight only the sub-paragraph currently being spoken at player.currentTime,
+    # not highlight the next sub-paragraph prematurely!
+    import subprocess
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'T',
+            paragraphs: [{
+                id: 1,
+                originalText: 'First subpara.\\n\\nSecond subpara.',
+                translatedText: 'Erster Absatz ist lang.\\n\\nZweiter Absatz folgt.',
+                turns: [{speaker: 'Narrator', text: 'Erster Absatz ist lang.\\n\\nZweiter Absatz folgt.'}],
+                chunks: [{chunk_index: 0, start_sec: 0, end_sec: 10, start_char: 0, end_char: 46, speakers: ['Narrator']}]
+            }],
+            characters: [],
+            difficultWords: []
+        }))
+        .replace('__AUDIO_DATA_JSON__', JSON.stringify({1: 'data:audio/mp3;base64,AAA'}))
+        .replace('__PLAY_SVG_JSON__', '""')
+        .replace('__PAUSE_SVG_JSON__', '""')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '""');
+
+    const makeSpan = (text) => {
+        const cls = new Set(['chunk-target', 'chunk-p1-c0']);
+        return {
+            textContent: text,
+            classList: {
+                add(c){ cls.add(c); },
+                remove(c){ cls.delete(c); },
+                contains(c){ return cls.has(c); }
+            },
+            getBoundingClientRect: () => ({ top: 0, height: 20 })
+        };
+    };
+    const span0 = makeSpan('Erster Absatz ist lang.');
+    const span1 = makeSpan('Zweiter Absatz folgt.');
+
+    const mockEl = (id) => ({
+        id, innerHTML: '', textContent: '', innerText: '', style: {}, dataset: {},
+        currentTime: 0, playbackRate: 1.0, clientHeight: 500, scrollTop: 0,
+        play(){}, pause(){}, scrollTo(){},
+        getBoundingClientRect: () => ({ top: 0, height: 500 }),
+        classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
+        addEventListener(){}, appendChild(){}, querySelectorAll(){ return []; },
+        closest(){ return null; }
+    });
+    const elements = {};
+    const getEl = (id) => {
+        if (!elements[id]) elements[id] = mockEl(id);
+        return elements[id];
+    };
+
+    const sandbox = {
+        document: {
+            getElementById: (id) => getEl(id),
+            querySelector: () => null,
+            querySelectorAll: (sel) => {
+                if (sel === '.chunk-p1-c0' || sel === '.active-chunk') return [span0, span1];
+                return [];
+            },
+            addEventListener: () => {},
+            documentElement: mockEl('html')
+        },
+        window: {
+            addEventListener: () => {},
+            location: { hash: '' },
+            matchMedia: () => ({ matches: false })
+        },
+        history: { replaceState(){} },
+        IntersectionObserver: function() { return { observe(){} }; },
+        console
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+
+    sandbox.playPara(1, true);
+    getEl('player').currentTime = 1.0; // 10% into 10s chunk -> still in span0!
+    sandbox.highlightActiveChunk(0);
+    const earlySpan0 = span0.classList.contains('active-chunk');
+    const earlySpan1 = span1.classList.contains('active-chunk');
+
+    getEl('player').currentTime = 8.0; // 80% into 10s chunk -> now in span1!
+    sandbox.highlightActiveChunk(0);
+    const lateSpan0 = span0.classList.contains('active-chunk');
+    const lateSpan1 = span1.classList.contains('active-chunk');
+
+    console.log(JSON.stringify({ earlySpan0, earlySpan1, lateSpan0, lateSpan1 }));
+    """
+    res = subprocess.run(["node", "-e", node_script, str(export_js)], capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    js_data = json.loads(res.stdout.strip())
+    assert js_data["earlySpan0"] is True
+    assert js_data["earlySpan1"] is False, "Second sub-paragraph must NOT be highlighted while first sub-paragraph is playing!"
+    assert js_data["lateSpan0"] is False
+    assert js_data["lateSpan1"] is True
+
+
+
+
 

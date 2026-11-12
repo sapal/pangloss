@@ -150,14 +150,9 @@ def ensure_chunk_metadata(metadata: StoryMetadata, audio_dir: Path):
             continue
         chunk_ranges = compute_chunk_ranges(sub_chunks, p.get("translatedText", ""))
 
-        if p.get("chunks"):
-            for idx, c in enumerate(p["chunks"]):
-                if idx < len(chunk_ranges):
-                    c["start_char"], c["end_char"] = chunk_ranges[idx]
-            continue
-
         wav_path = audio_dir / f"{p['id']}.wav"
         durs = []
+        total_wav_dur = 0.0
         if wav_path.exists():
             try:
                 with open(wav_path, "rb") as f:
@@ -165,6 +160,7 @@ def ensure_chunk_metadata(metadata: StoryMetadata, audio_dir: Path):
                 with wave.open(io.BytesIO(wav_data), "rb") as w:
                     frames = w.readframes(w.getnframes())
                     sample_rate = w.getframerate()
+                total_wav_dur = (len(frames) / 2) / sample_rate if sample_rate else 0.0
                 silence = b"\x00\x00" * int(sample_rate * 0.15)
                 parts = frames.split(silence)
                 if len(parts) == len(sub_chunks):
@@ -173,8 +169,29 @@ def ensure_chunk_metadata(metadata: StoryMetadata, audio_dir: Path):
             except Exception:
                 durs = []
 
+        existing_chunks = p.get("chunks")
+        if (
+            existing_chunks
+            and len(existing_chunks) == len(sub_chunks)
+            and (total_wav_dur <= 0 or abs(existing_chunks[-1].get("end_sec", 0.0) - total_wav_dur) <= 1.5)
+        ):
+            for idx, c in enumerate(existing_chunks):
+                if idx < len(chunk_ranges):
+                    c["start_char"], c["end_char"] = chunk_ranges[idx]
+            continue
+
         if len(durs) != len(sub_chunks):
-            durs = [5.0] * len(sub_chunks)
+            if total_wav_dur > 0:
+                pause_total = 0.150 * max(0, len(sub_chunks) - 1)
+                avail_dur = max(0.1 * len(sub_chunks), total_wav_dur - pause_total)
+                weights = [
+                    max(1, (chunk_ranges[idx][1] - chunk_ranges[idx][0]) if idx < len(chunk_ranges) else 1)
+                    for idx in range(len(sub_chunks))
+                ]
+                total_weight = sum(weights) or 1
+                durs = [round(avail_dur * (w / total_weight), 3) for w in weights]
+            else:
+                durs = [5.0] * len(sub_chunks)
 
         chunks_info = []
         curr_time = 0.0

@@ -409,34 +409,9 @@
             return { p, chunks: p.chunks, chunkIndex: idx, chunk: p.chunks[idx] };
         }
 
-        function highlightActiveChunk(chunkIdx) {
-            if (currentActiveChunk === chunkIdx && document.querySelector(`.chunk-p${currentId}-c${chunkIdx}.active-chunk`)) {
-                return;
-            }
-            document.querySelectorAll('.active-chunk').forEach(el => {
-                el.classList.remove('active-chunk');
-            });
-            if (chunkIdx !== null && currentId !== null) {
-                const els = document.querySelectorAll(`.chunk-p${currentId}-c${chunkIdx}`);
-                els.forEach(el => {
-                    el.classList.add('active-chunk');
-                });
-                currentActiveChunk = chunkIdx;
-            } else {
-                currentActiveChunk = null;
-            }
-        }
-
-        function scrollToActiveChunk(chunk, smooth = true, force = false) {
-            if (currentId === null) return false;
-            const els = document.querySelectorAll(`.chunk-p${currentId}-c${chunk.chunk_index}`);
-            if (els.length === 0) return false;
-
-            const containerRect = scrollContainer.getBoundingClientRect();
-            const chunkDur = (chunk.end_sec - chunk.start_sec) || 1;
-            const chunkProgress = Math.max(0, Math.min(1, (player.currentTime - chunk.start_sec) / chunkDur));
-
-            // Select the exact translated element within the chunk currently being spoken
+        function getActiveSubTargetForChunk(chunk, els) {
+            const chunkDur = (chunk && (chunk.end_sec - chunk.start_sec)) || 1;
+            const chunkProgress = chunk ? Math.max(0, Math.min(1, (player.currentTime - chunk.start_sec) / chunkDur)) : 0;
             let targetEl = els[0];
             let subProgress = chunkProgress;
             if (els.length > 1) {
@@ -454,6 +429,50 @@
                     curChars = nextChars;
                 }
             }
+            return { targetEl, subProgress };
+        }
+
+        function highlightActiveChunk(chunkIdx) {
+            if (chunkIdx === null || currentId === null) {
+                document.querySelectorAll('.active-chunk').forEach(el => {
+                    el.classList.remove('active-chunk');
+                });
+                currentActiveChunk = null;
+                return;
+            }
+            const els = document.querySelectorAll(`.chunk-p${currentId}-c${chunkIdx}`);
+            if (els.length === 0) {
+                currentActiveChunk = chunkIdx;
+                return;
+            }
+            const p = metadata.paragraphs.find(para => para.id === currentId);
+            const chunk = (p && p.chunks) ? p.chunks.find(c => c.chunk_index === chunkIdx) : null;
+            const { targetEl } = getActiveSubTargetForChunk(chunk, els);
+
+            if (currentActiveChunk === chunkIdx && targetEl && targetEl.classList.contains('active-chunk')) {
+                let othersActive = false;
+                els.forEach(el => {
+                    if (el !== targetEl && el.classList.contains('active-chunk')) othersActive = true;
+                });
+                if (!othersActive) return;
+            }
+
+            document.querySelectorAll('.active-chunk').forEach(el => {
+                el.classList.remove('active-chunk');
+            });
+            if (targetEl) {
+                targetEl.classList.add('active-chunk');
+            }
+            currentActiveChunk = chunkIdx;
+        }
+
+        function scrollToActiveChunk(chunk, smooth = true, force = false) {
+            if (currentId === null) return false;
+            const els = document.querySelectorAll(`.chunk-p${currentId}-c${chunk.chunk_index}`);
+            if (els.length === 0) return false;
+
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const { targetEl, subProgress } = getActiveSubTargetForChunk(chunk, els);
 
             const targetRect = targetEl.getBoundingClientRect();
             // Center the currently spoken text in the translated column around the middle of the screen
