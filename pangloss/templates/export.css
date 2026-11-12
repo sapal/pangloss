@@ -411,6 +411,15 @@
             background-color: rgba(163, 163, 117, 0.22);
             box-shadow: 0 0 12px 4px rgba(163, 163, 117, 0.18);
         }
+        .vocab-search-input {
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .vocab-search-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(90, 90, 64, 0.2);
+        }
         body { background-color: var(--paper); color: var(--ink); font-family: 'Lora', Georgia, serif; -webkit-font-smoothing: antialiased; height: 100vh; height: 100dvh; display: flex; overflow: hidden; margin: 0; }
         .font-sans { font-family: 'Helvetica Neue', Arial, sans-serif; }
         .text-accent { color: var(--accent); }

@@ -18,6 +18,7 @@
         const speedBtn = document.getElementById('speedToggle');
         const resumeAutoScrollBtn = document.getElementById('resumeAutoScrollBtn');
         const chapterProgressBar = document.getElementById('chapterProgressBar');
+        const vocabSearchInput = document.getElementById('vocabSearch');
         const closeDrawer = document.getElementById('closeDrawer');
         
         const prevChunkBtn = document.getElementById('prevChunkBtn');
@@ -455,12 +456,7 @@
                 `;
             }).join('');
 
-            document.getElementById('vocabList').innerHTML = metadata.difficultWords.map(dw => `
-                <div class="group border-b border-ink/5 pb-6 last:border-0 hover:translate-x-1 transition-transform">
-                    <p class="text-2xl font-serif font-bold mb-2">${dw.word}</p>
-                    <p class="text-sm text-ink/70 font-serif italic leading-relaxed">${dw.explanation}</p>
-                </div>
-            `).join('');
+            renderVocabList('');
 
             document.getElementById('castList').innerHTML = metadata.characters.map(char => `
                 <div class="flex gap-6">
@@ -480,6 +476,80 @@
             `).join('');
 
             document.querySelectorAll('[id^="section-"]').forEach(el => observer.observe(el));
+        }
+
+        function renderVocabList(filterQuery = '') {
+            const vocabListEl = document.getElementById('vocabList');
+            if (!vocabListEl) return;
+            const q = String(filterQuery || '').trim().toLowerCase();
+            const entries = (metadata.difficultWords || []).map((dw, idx) => ({ dw, idx })).filter(({ dw }) => {
+                if (!q) return true;
+                const wMatch = (dw.word || '').toLowerCase().includes(q);
+                const eMatch = (dw.explanation || '').toLowerCase().includes(q);
+                const aMatch = Array.isArray(dw.anchors) && dw.anchors.some(a => (a || '').toLowerCase().includes(q));
+                return wMatch || eMatch || aMatch;
+            });
+
+            vocabListEl.innerHTML = entries.map(({ dw, idx }) => `
+                <div onclick="jumpToVocabWord(${idx})" class="group border-b border-ink/5 pb-6 last:border-0 hover:translate-x-1 transition-transform cursor-pointer">
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <p class="text-2xl font-serif font-bold">${escapeHtml(dw.word)}</p>
+                        <span class="text-[10px] font-sans uppercase tracking-[1.5px] text-accent opacity-60 group-hover:opacity-100">Jump →</span>
+                    </div>
+                    <p class="text-sm text-ink/70 font-serif italic leading-relaxed">${escapeHtml(dw.explanation)}</p>
+                </div>
+            `).join('');
+        }
+
+        function jumpToVocabWord(wordOrIdx) {
+            const list = metadata.difficultWords || [];
+            let dw = null;
+            if (typeof wordOrIdx === 'number' && list[wordOrIdx]) {
+                dw = list[wordOrIdx];
+            } else if (typeof wordOrIdx === 'string') {
+                dw = list.find(item => item.word === wordOrIdx || (item.anchors && item.anchors.includes(wordOrIdx)));
+            }
+            if (!dw) return;
+
+            if (drawer && drawer.classList) drawer.classList.remove('active');
+            if (overlay && overlay.classList) overlay.classList.remove('opacity-100', 'pointer-events-auto');
+
+            const candidates = [dw.word, ...(dw.anchors || [])].filter(Boolean).map(s => s.toLowerCase());
+            const wordEls = Array.from(document.querySelectorAll('.word'));
+            let matchedEl = wordEls.find(el => {
+                const txt = (el.textContent || el.innerText || '').toLowerCase();
+                return candidates.some(c => txt.includes(c));
+            });
+
+            if (matchedEl) {
+                const sectionEl = matchedEl.closest ? matchedEl.closest('[id^="section-"]') : null;
+                if (sectionEl && sectionEl.id) {
+                    const secId = parseInt(sectionEl.id.replace('section-', ''));
+                    if (!isNaN(secId) && !isPlaying) {
+                        currentId = secId;
+                        updateUI(false);
+                    }
+                }
+                const containerRect = scrollContainer.getBoundingClientRect ? scrollContainer.getBoundingClientRect() : { top: 0 };
+                const rect = matchedEl.getBoundingClientRect ? matchedEl.getBoundingClientRect() : { top: 200, height: 20 };
+                const pointY = rect.top - containerRect.top + (rect.height || 20) / 2;
+                const midY = (scrollContainer.clientHeight || 600) / 2;
+                const targetScrollTop = (scrollContainer.scrollTop || 0) + (pointY - midY);
+                if (scrollContainer.scrollTo) {
+                    scrollContainer.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+                }
+                toggleTooltip(null, matchedEl);
+            }
+        }
+
+        if (vocabSearchInput) {
+            const onVocabSearch = (e) => {
+                renderVocabList(e && e.target ? e.target.value : vocabSearchInput.value);
+            };
+            vocabSearchInput.oninput = onVocabSearch;
+            if (vocabSearchInput.addEventListener) {
+                vocabSearchInput.addEventListener('input', onVocabSearch);
+            }
         }
 
         function openDrawer() {

@@ -1388,6 +1388,153 @@ def test_dark_mode_toggle_and_persistence():
     assert data["restoredTheme"] == "dark"
 
 
+def test_searchable_lexicon_and_jump_to_word():
+    import subprocess
+    from pathlib import Path
+
+    metadata: StoryMetadata = {
+        "title": "Test Story",
+        "characters": [{"name": "Narrator", "description": "N", "voice": "Puck", "voiceProfile": "Calm"}],
+        "difficultWords": [
+            {"word": "die Quanten-Teekanne", "explanation": "Quantum teapot", "anchors": ["Quanten-Teekanne"]},
+            {"word": "zögern", "explanation": "to hesitate", "anchors": ["zögerte"]}
+        ],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "First.",
+                "translatedText": "Die Quanten-Teekanne glänzte.",
+                "turns": [{"speaker": "Narrator", "text": "Die Quanten-Teekanne glänzte."}]
+            },
+            {
+                "id": 2,
+                "originalText": "Second.",
+                "translatedText": "Arthur zögerte kurz.",
+                "turns": [{"speaker": "Narrator", "text": "Arthur zögerte kurz."}]
+            }
+        ]
+    }
+    html_content = generate_html(metadata, {}, "English", "German", "B1")
+    assert 'id="vocabSearch"' in html_content
+
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'T',
+            paragraphs: [
+                {id: 1, originalText: 'First.', translatedText: 'Die Quanten-Teekanne glänzte.', turns: [{speaker: 'Narrator', text: 'Die Quanten-Teekanne glänzte.'}]},
+                {id: 2, originalText: 'Second.', translatedText: 'Arthur zögerte kurz.', turns: [{speaker: 'Narrator', text: 'Arthur zögerte kurz.'}]}
+            ],
+            characters: [],
+            difficultWords: [
+                {word: 'die Quanten-Teekanne', explanation: 'Quantum teapot', anchors: ['Quanten-Teekanne']},
+                {word: 'zögern', explanation: 'to hesitate', anchors: ['zögerte']}
+            ]
+        }))
+        .replace('__AUDIO_DATA_JSON__', '{}')
+        .replace('__PLAY_SVG_JSON__', '""')
+        .replace('__PAUSE_SVG_JSON__', '""')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '""');
+
+    let scrollCount = 0;
+    const mockEl = (id, text = '') => {
+        const classes = new Set();
+        const listeners = {};
+        return {
+            id, innerHTML: '', textContent: text, innerText: text, value: '', style: {}, dataset: {},
+            clientHeight: 600, scrollTop: 0,
+            scrollTo(){ scrollCount++; },
+            getBoundingClientRect(){ return { top: 200, bottom: 220, left: 50, right: 120, width: 70, height: 20 }; },
+            classList: {
+                add(...c){ c.forEach(x => classes.add(x)); },
+                remove(...c){ c.forEach(x => classes.delete(x)); },
+                toggle(x){ classes.has(x) ? classes.delete(x) : classes.add(x); },
+                contains(x){ return classes.has(x); }
+            },
+            addEventListener(evt, fn){
+                if (!listeners[evt]) listeners[evt] = [];
+                listeners[evt].push(fn);
+            },
+            trigger(evt, e = {}){
+                (listeners[evt] || []).forEach(fn => fn(e));
+            },
+            appendChild(){}, querySelectorAll(){ return []; },
+            querySelector(){ return null; },
+            closest(sel){ return sel === '[id^="section-"]' ? getEl('section-2') : null; }
+        };
+    };
+    const elements = {};
+    const getEl = (id) => {
+        if (!elements[id]) elements[id] = mockEl(id);
+        return elements[id];
+    };
+    const wordEl1 = mockEl('w1', 'Quanten-Teekannedie Quanten-Teekanne: Quantum teapot');
+    const wordEl2 = mockEl('w2', 'zögertedie zögern: to hesitate');
+
+    const sandbox = {
+        document: {
+            getElementById: (id) => getEl(id),
+            querySelector: () => null,
+            querySelectorAll: (sel) => sel.includes('.word') ? [wordEl1, wordEl2] : [],
+            addEventListener: () => {},
+            documentElement: mockEl('html')
+        },
+        window: {
+            innerWidth: 800,
+            innerHeight: 600,
+            addEventListener: () => {},
+            location: { hash: '' },
+            matchMedia: () => ({ matches: false })
+        },
+        history: { replaceState(){} },
+        IntersectionObserver: function() { return { observe(){} }; },
+        console
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+
+    const initialVocabHtml = getEl('vocabList').innerHTML;
+
+    // 1. Typing 'hesitate' into #vocabSearch filters #vocabList to only 'zögern'
+    const searchInput = getEl('vocabSearch');
+    searchInput.value = 'hesitate';
+    if (searchInput.oninput) searchInput.oninput({ target: searchInput });
+    searchInput.trigger('input', { target: searchInput });
+    const filteredVocabHtml = getEl('vocabList').innerHTML;
+
+    // 2. Calling jumpToVocabWord('zögern') closes drawer, scrolls to word, and activates its tooltip
+    getEl('drawer').classList.add('active');
+    scrollCount = 0;
+    sandbox.jumpToVocabWord('zögern');
+    const drawerClosedAfterJump = !getEl('drawer').classList.contains('active');
+    const word2TooltipActive = wordEl2.classList.contains('active-tooltip');
+
+    console.log(JSON.stringify({
+        bothInInitial: initialVocabHtml.includes('Quanten-Teekanne') && initialVocabHtml.includes('zögern'),
+        filteredHasZogernOnly: filteredVocabHtml.includes('zögern') && !filteredVocabHtml.includes('Quanten-Teekanne'),
+        drawerClosedAfterJump,
+        word2TooltipActive,
+        scrollCount
+    }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    data = json.loads(res.stdout.strip())
+    assert data["bothInInitial"] is True
+    assert data["filteredHasZogernOnly"] is True
+    assert data["drawerClosedAfterJump"] is True
+    assert data["word2TooltipActive"] is True
+    assert data["scrollCount"] >= 1
+
+
 
 if __name__ == "__main__":
     try:
