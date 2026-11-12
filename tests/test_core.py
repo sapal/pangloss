@@ -554,6 +554,147 @@ def test_chunk_highlight_sync_and_proportional_wav_durations(tmp_path):
     assert js_data["lateSpan1"] is True
 
 
+def test_paragraph_1_highlight_not_ahead_of_audio_with_tooltips_and_subparagraphs():
+    """
+    Verify that on Paragraph 1 of Die Quanten-Teekanne:
+    1) Hidden .tooltip dictionary explanations inside .chunk-target spans do NOT inflate
+       sub-paragraph length weights in getActiveSubTargetForChunk (causing early highlight jumps).
+    2) ensure_chunk_metadata subdivides chunks that span multiple sub-paragraphs (\n\n) and snaps
+       split timestamps to actual acoustic pauses in the WAV file so each sub-paragraph has
+       accurate start_sec / end_sec.
+    """
+    import copy
+    import subprocess
+    from pangloss.export import ensure_chunk_metadata
+
+    meta_path = Path(__file__).parent / ".pangloss" / "1144ef38aae2" / "metadata.json"
+    audio_dir = Path(__file__).parent / ".pangloss" / "1144ef38aae2" / "audio_chunks_lite"
+    assert meta_path.exists()
+
+    with open(meta_path, "r", encoding="utf-8") as f:
+        metadata = json.load(f)
+
+    # 1) Test JS getActiveSubTargetForChunk with tooltips inside later sub-paragraphs (unsplit Chunk 0 case)
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = r"""
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    const meta = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify(meta))
+        .replace('__AUDIO_DATA_JSON__', JSON.stringify({1: "data:audio/mp3;base64,AAAA"}))
+        .replace('__PLAY_SVG_JSON__', JSON.stringify('<svg>play</svg>'))
+        .replace('__PAUSE_SVG_JSON__', JSON.stringify('<svg>pause</svg>'));
+
+    let renderedStoryHtml = '';
+    const makeClassList = (initial = []) => {
+        const set = new Set(initial);
+        return {
+            add: (...cls) => cls.forEach(c => set.add(c)),
+            remove: (...cls) => cls.forEach(c => set.delete(c)),
+            toggle: (c) => set.has(c) ? set.delete(c) : set.add(c),
+            contains: (c) => set.has(c)
+        };
+    };
+
+    const mockEl = (id) => ({
+        id, innerHTML: '', innerText: '', textContent: '', style: {}, dataset: {},
+        currentTime: 0, duration: 29.71, playbackRate: 1,
+        play(){}, pause(){}, scrollTo(){},
+        getBoundingClientRect: () => ({ top: 0, height: 500 }),
+        classList: makeClassList(),
+        addEventListener(){}, appendChild(){}, querySelectorAll(){ return []; },
+        closest(){ return null; }
+    });
+    const elements = {};
+    const getEl = (id) => {
+        if (!elements[id]) elements[id] = mockEl(id);
+        return elements[id];
+    };
+
+    let chunkSpans = [];
+    const sandbox = {
+        document: {
+            getElementById: (id) => getEl(id),
+            querySelector: () => null,
+            querySelectorAll: (sel) => {
+                if (sel === '.chunk-p1-c0' || sel === '.active-chunk') return chunkSpans;
+                return [];
+            },
+            addEventListener: () => {},
+            documentElement: mockEl('html')
+        },
+        window: {
+            addEventListener: () => {},
+            location: { hash: '' },
+            matchMedia: () => ({ matches: false })
+        },
+        history: { replaceState(){} },
+        IntersectionObserver: function() { return { observe(){} }; },
+        console
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+
+    // Parse rendered chunk-p1-c0 spans from story HTML, simulating browser textContent (which includes .tooltip text!)
+    const storyHtml = getEl('story').innerHTML;
+    const spanRegex = /<span class="chunk-target chunk-p1-c0"([^>]*)>([\s\S]*?)<\/span>(?=<\/h|<\/div|<span class="chunk-target)/g;
+    let m;
+    while ((m = spanRegex.exec(storyHtml)) !== null) {
+        const attrs = m[1];
+        const inner = m[2];
+        const textWithTooltips = inner.replace(/<[^>]+>/g, '');
+        const spokenLenMatch = attrs.match(/data-spoken-len="([^"]+)"/);
+        const dataset = {};
+        if (spokenLenMatch) dataset.spokenLen = spokenLenMatch[1];
+        chunkSpans.push({
+            innerHTML: inner,
+            textContent: textWithTooltips,
+            dataset,
+            classList: makeClassList(['chunk-target', 'chunk-p1-c0']),
+            getBoundingClientRect: () => ({ top: 100, height: 30 })
+        });
+    }
+
+    sandbox.playPara(1, true);
+    // At t = 7.5s, the narrator is speaking Row 1 ("Es war ein kalter Morgen in London...").
+    // Row 2 ("## Die Entdeckung") does not start until 12.3s!
+    getEl('player').currentTime = 7.5;
+    sandbox.highlightActiveChunk(0);
+    const activeIdxAt7_5 = chunkSpans.findIndex(s => s.classList.contains('active-chunk'));
+    console.log(JSON.stringify({ spanCount: chunkSpans.length, activeIdxAt7_5 }));
+    """
+    res = subprocess.run(["node", "-e", node_script, str(export_js), str(meta_path)], capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    js_out = json.loads(res.stdout.strip())
+    assert js_out["spanCount"] >= 5
+    assert js_out["activeIdxAt7_5"] == 1, (
+        f"At t=7.5s in Paragraph 1, Row 1 ('Es war ein kalter Morgen...') should be highlighted, "
+        f"got row {js_out['activeIdxAt7_5']} (hidden tooltip text inflated later rows!)"
+    )
+
+    # 2) Test ensure_chunk_metadata subdivides Paragraph 1 across \n\n and snaps to WAV acoustic pauses
+    meta_copy = copy.deepcopy(metadata)
+    ensure_chunk_metadata(meta_copy, audio_dir)
+    p1_chunks = meta_copy["paragraphs"][0]["chunks"]
+    assert len(p1_chunks) == 6, f"Expected 6 sub-paragraph chunks in Paragraph 1, got {len(p1_chunks)}"
+    # Check acoustic alignment against 1.wav:
+    # Chunk 0: "# Die Quanten-Teekanne" (~0.0s - ~3.0s)
+    assert 2.0 <= p1_chunks[0]["end_sec"] <= 3.3
+    # Chunk 1: "Es war ein kalter Morgen..." (~3.0s - ~12.3s)
+    assert 2.0 <= p1_chunks[1]["start_sec"] <= 3.3
+    assert 11.3 <= p1_chunks[1]["end_sec"] <= 12.5
+    # Chunk 2: "## Die Entdeckung" (~12.3s - ~14.1s)
+    assert 12.0 <= p1_chunks[2]["start_sec"] <= 12.6
+    assert 13.1 <= p1_chunks[2]["end_sec"] <= 14.3
+    # Chunk 3: "„Gibst du mir bitte den Zucker?“..." (~14.1s - ~20.8s)
+    assert 13.8 <= p1_chunks[3]["start_sec"] <= 14.4
+    assert 19.8 <= p1_chunks[3]["end_sec"] <= 21.0
+
+
+
 
 
 

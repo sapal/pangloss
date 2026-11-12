@@ -333,6 +333,17 @@
             return result;
         }
 
+        function getSpokenWeight(rawText, isLastInChunk = false) {
+            if (!rawText) return 1;
+            let clean = String(rawText).replace(/<[^>]+>/g, '');
+            clean = clean.replace(/^#+\s*/, '').replace(/[\*_]/g, '').trim();
+            const charLen = Math.max(1, clean.length);
+            const sentPauses = (clean.match(/[.!?…]/g) || []).length * 6;
+            const commaPauses = (clean.match(/[,;:—–]/g) || []).length * 3;
+            const paraPause = isLastInChunk ? 0 : 14;
+            return charLen + sentPauses + commaPauses + paraPause;
+        }
+
         function renderTransRow(p, rowIdx, rawText, sortedWords, rowStart, rowEnd) {
             if (!rawText) return "";
             let cleanText = rawText.replace(/<[a-zA-Z\s_\/-]+>/g, "");
@@ -355,9 +366,11 @@
 
             if (overlapping.length === 1) {
                 const c = overlapping[0];
+                const isLastInChunk = rowEnd >= c.end_char;
+                const spokenLen = getSpokenWeight(bodyText, isLastInChunk);
                 let content = md(bodyText);
                 content = applyWords(content, sortedWords);
-                const spanHtml = `<span class="chunk-target chunk-p${p.id}-c${c.chunk_index}" data-para-id="${p.id}" data-chunk-idx="${c.chunk_index}" onclick="seekToChunk(event, ${p.id}, ${c.chunk_index})">${content}</span>`;
+                const spanHtml = `<span class="chunk-target chunk-p${p.id}-c${c.chunk_index}" data-para-id="${p.id}" data-chunk-idx="${c.chunk_index}" data-spoken-len="${spokenLen}" onclick="seekToChunk(event, ${p.id}, ${c.chunk_index})">${content}</span>`;
                 return headingLevel > 0 ? `<h${headingLevel}>${spanHtml}</h${headingLevel}>` : spanHtml;
             } else {
                 let inBold = false;
@@ -368,6 +381,8 @@
                     const sliceStart = Math.max(0, (oStart - rowStart) - headingPrefixLen);
                     const sliceEnd = Math.max(0, (oEnd - rowStart) - headingPrefixLen);
                     let segText = bodyText.slice(sliceStart, sliceEnd);
+                    const isLastInChunk = oEnd >= c.end_char;
+                    const spokenLen = getSpokenWeight(segText, isLastInChunk);
 
                     const boldCount = (segText.match(/\*\*/g) || []).length;
                     const singleStarText = segText.replace(/\*\*/g, "");
@@ -389,7 +404,7 @@
 
                     let segHtml = md(prefix + segText + suffix);
                     segHtml = applyWords(segHtml, sortedWords);
-                    return `<span class="chunk-target chunk-p${p.id}-c${c.chunk_index}" data-para-id="${p.id}" data-chunk-idx="${c.chunk_index}" onclick="seekToChunk(event, ${p.id}, ${c.chunk_index})">${segHtml}</span>`;
+                    return `<span class="chunk-target chunk-p${p.id}-c${c.chunk_index}" data-para-id="${p.id}" data-chunk-idx="${c.chunk_index}" data-spoken-len="${spokenLen}" onclick="seekToChunk(event, ${p.id}, ${c.chunk_index})">${segHtml}</span>`;
                 });
                 const joined = pieces.join('');
                 return headingLevel > 0 ? `<h${headingLevel}>${joined}</h${headingLevel}>` : joined;
@@ -624,6 +639,10 @@
                     idx = p.chunks.length - 1;
                 } else {
                     for (let i = 0; i < p.chunks.length; i++) {
+                        if (t < p.chunks[i].start_sec) {
+                            idx = Math.max(0, i - 1);
+                            break;
+                        }
                         if (t < p.chunks[i].end_sec) {
                             idx = i;
                             break;
@@ -635,13 +654,25 @@
             return { p, chunks: p.chunks, chunkIndex: idx, chunk: p.chunks[idx] };
         }
 
+        function getElementSpokenWeight(el, isLastInChunk = false) {
+            if (el && el.dataset && el.dataset.spokenLen) {
+                const parsed = parseFloat(el.dataset.spokenLen);
+                if (!isNaN(parsed) && parsed > 0) return parsed;
+            }
+            if (el && typeof el.innerHTML === 'string' && el.innerHTML.length > 0) {
+                const noTooltipHtml = el.innerHTML.replace(/<div class="tooltip"[\s\S]*?<\/div>/g, '');
+                return getSpokenWeight(noTooltipHtml, isLastInChunk);
+            }
+            return Math.max(1, (el && el.textContent ? el.textContent : '').length);
+        }
+
         function getActiveSubTargetForChunk(chunk, els) {
             const chunkDur = (chunk && (chunk.end_sec - chunk.start_sec)) || 1;
             const chunkProgress = chunk ? Math.max(0, Math.min(1, (player.currentTime - chunk.start_sec) / chunkDur)) : 0;
             let targetEl = els[0];
             let subProgress = chunkProgress;
             if (els.length > 1) {
-                const lens = Array.from(els).map(el => Math.max(1, (el.textContent || '').length));
+                const lens = Array.from(els).map((el, i) => getElementSpokenWeight(el, i === els.length - 1));
                 const totalTextLen = lens.reduce((sum, l) => sum + l, 0);
                 const targetCharIdx = chunkProgress * totalTextLen;
                 let curChars = 0;

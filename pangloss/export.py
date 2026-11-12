@@ -138,6 +138,155 @@ def generate_html(metadata: StoryMetadata, audio_chunks: dict, source_lang: str,
     rendered_html = rendered_html.replace("/* INLINED_JS */\n", js_rendered)
     return rendered_html
 
+def find_wav_pauses(frames: bytes, sample_rate: int, start_sec: float, end_sec: float) -> list[tuple[float, float, float]]:
+    """Finds acoustic pauses (low-RMS intervals >= 180ms) in 16-bit mono PCM WAV frames within [start_sec, end_sec]."""
+    import array
+    import math
+
+    if not frames or sample_rate <= 0 or end_sec <= start_sec:
+        return []
+
+    win_sec = 0.04
+    win_samples = max(1, int(sample_rate * win_sec))
+    win_bytes = win_samples * 2
+    total_windows = len(frames) // win_bytes
+    start_w = max(0, int(start_sec / win_sec))
+    end_w = min(total_windows, int(end_sec / win_sec))
+
+    pauses = []
+    in_sil = False
+    sil_start = 0.0
+    for w_idx in range(start_w, end_w):
+        chunk = frames[w_idx * win_bytes : (w_idx + 1) * win_bytes]
+        samples = array.array("h", chunk)
+        rms = math.sqrt(sum(s * s for s in samples) / len(samples)) if samples else 0.0
+        t = w_idx * win_sec
+        if rms < 120.0:
+            if not in_sil:
+                in_sil = True
+                sil_start = t
+        else:
+            if in_sil:
+                dur = t - sil_start
+                if dur >= 0.18:
+                    pauses.append((round(sil_start, 3), round(t, 3), round(dur, 3)))
+                in_sil = False
+    if in_sil:
+        t = end_w * win_sec
+        dur = t - sil_start
+        if dur >= 0.18:
+            pauses.append((round(sil_start, 3), round(t, 3), round(dur, 3)))
+    return pauses
+
+
+def spoken_text_weight(text: str, is_last: bool = False) -> float:
+    """Computes an estimated spoken duration weight for a sub-paragraph, accounting for punctuation & paragraph pauses."""
+    import re
+
+    clean = re.sub(r"<[a-zA-Z\s_\/-]+>", "", text or "")
+    clean = re.sub(r"^#+\s*", "", clean.strip())
+    clean = clean.replace("**", "").replace("__", "").replace("*", "").replace("_", "")
+    char_len = max(1, len(clean))
+    sent_pauses = sum(clean.count(ch) for ch in ".!?…") * 6.0
+    comma_pauses = sum(clean.count(ch) for ch in ",;:—–") * 3.0
+    para_pause = 0.0 if is_last else 14.0
+    return float(char_len) + sent_pauses + comma_pauses + para_pause
+
+
+def split_chunk_across_subparagraphs(
+    c: dict, translated_text: str, frames: bytes | None = None, sample_rate: int = 0
+) -> list[dict]:
+    """Subdivides a chunk that crosses \\n\\n sub-paragraph boundaries and snaps split timestamps to WAV pauses."""
+    if not translated_text:
+        return [dict(c)]
+
+    c_start = c.get("start_char", 0)
+    c_end = c.get("end_char", 0)
+    if c_end <= c_start:
+        return [dict(c)]
+
+    sub_paras = translated_text.split("\n\n")
+    sp_ranges = []
+    pos = 0
+    for sp in sub_paras:
+        sp_start = pos
+        sp_end = pos + len(sp)
+        sp_ranges.append((sp_start, sp_end))
+        pos = sp_end + 2
+
+    overlapping_spans = [
+        (max(c_start, sp_start), min(c_end, sp_end))
+        for sp_start, sp_end in sp_ranges
+        if max(c_start, sp_start) < min(c_end, sp_end)
+    ]
+    if len(overlapping_spans) <= 1:
+        return [dict(c)]
+
+    start_sec = float(c.get("start_sec", 0.0))
+    end_sec = float(c.get("end_sec", start_sec))
+    total_dur = max(0.05, end_sec - start_sec)
+
+    weights = [
+        spoken_text_weight(translated_text[s:e], is_last=(idx == len(overlapping_spans) - 1))
+        for idx, (s, e) in enumerate(overlapping_spans)
+    ]
+    total_w = sum(weights) or 1.0
+
+    raw_pauses = find_wav_pauses(frames, sample_rate, start_sec, end_sec) if frames and sample_rate > 0 else []
+    candidate_pauses = [
+        p for p in raw_pauses if p[0] > start_sec + 0.35 and p[1] < end_sec - 0.25
+    ]
+    used_pauses = set()
+
+    result = []
+    cur_sec = start_sec
+    cum_w = 0.0
+    max_search_window = max(2.5, 0.24 * total_dur)
+
+    for idx, (s_char, e_char) in enumerate(overlapping_spans):
+        cum_w += weights[idx]
+        if idx == len(overlapping_spans) - 1:
+            sub_end_sec = round(end_sec, 3)
+            next_start_sec = sub_end_sec
+        else:
+            expected_t = start_sec + (cum_w / total_w) * total_dur
+            best_p_idx = None
+            best_score = float("inf")
+            for p_idx, p in enumerate(candidate_pauses):
+                if p_idx in used_pauses:
+                    continue
+                mid = (p[0] + p[1]) / 2.0
+                if mid <= cur_sec + 0.25 or mid >= end_sec - 0.25:
+                    continue
+                dist = abs(mid - expected_t)
+                if dist <= max_search_window:
+                    score = dist - 1.2 * min(p[2], 1.2)
+                    if score < best_score:
+                        best_score = score
+                        best_p_idx = p_idx
+
+            if best_p_idx is not None:
+                used_pauses.add(best_p_idx)
+                p_start, p_end, _ = candidate_pauses[best_p_idx]
+                sub_end_sec = round(max(cur_sec + 0.05, p_end - 0.05), 3)
+                next_start_sec = round(max(sub_end_sec, p_end - 0.02), 3)
+            else:
+                sub_end_sec = round(max(cur_sec + 0.05, min(end_sec - 0.05, expected_t)), 3)
+                next_start_sec = sub_end_sec
+
+        result.append({
+            "chunk_index": 0,
+            "start_sec": round(cur_sec, 3),
+            "end_sec": sub_end_sec,
+            "start_char": s_char,
+            "end_char": e_char,
+            "speakers": list(c.get("speakers", [])),
+        })
+        cur_sec = next_start_sec
+
+    return result
+
+
 def ensure_chunk_metadata(metadata: StoryMetadata, audio_dir: Path):
     """Ensures each paragraph in metadata has chunk timing and character range info."""
     from .api import partition_paragraph_into_subchunks, compute_chunk_ranges
@@ -148,11 +297,14 @@ def ensure_chunk_metadata(metadata: StoryMetadata, audio_dir: Path):
         if not sub_chunks:
             p["chunks"] = []
             continue
-        chunk_ranges = compute_chunk_ranges(sub_chunks, p.get("translatedText", ""))
+        translated_text = p.get("translatedText", "")
+        chunk_ranges = compute_chunk_ranges(sub_chunks, translated_text)
 
         wav_path = audio_dir / f"{p['id']}.wav"
         durs = []
         total_wav_dur = 0.0
+        frames = b""
+        sample_rate = 0
         if wav_path.exists():
             try:
                 with open(wav_path, "rb") as f:
@@ -170,47 +322,69 @@ def ensure_chunk_metadata(metadata: StoryMetadata, audio_dir: Path):
                 durs = []
 
         existing_chunks = p.get("chunks")
+        base_chunks = None
         if (
             existing_chunks
             and len(existing_chunks) == len(sub_chunks)
             and (total_wav_dur <= 0 or abs(existing_chunks[-1].get("end_sec", 0.0) - total_wav_dur) <= 1.5)
         ):
+            base_chunks = []
             for idx, c in enumerate(existing_chunks):
+                c_copy = dict(c)
                 if idx < len(chunk_ranges):
-                    c["start_char"], c["end_char"] = chunk_ranges[idx]
+                    c_copy["start_char"], c_copy["end_char"] = chunk_ranges[idx]
+                base_chunks.append(c_copy)
+        elif (
+            existing_chunks
+            and len(existing_chunks) > len(sub_chunks)
+            and (total_wav_dur <= 0 or abs(existing_chunks[-1].get("end_sec", 0.0) - total_wav_dur) <= 1.5)
+            and all(
+                len(split_chunk_across_subparagraphs(c, translated_text)) == 1
+                for c in existing_chunks
+            )
+        ):
+            for idx, c in enumerate(existing_chunks):
+                c["chunk_index"] = idx
             continue
 
-        if len(durs) != len(sub_chunks):
-            if total_wav_dur > 0:
-                pause_total = 0.150 * max(0, len(sub_chunks) - 1)
-                avail_dur = max(0.1 * len(sub_chunks), total_wav_dur - pause_total)
-                weights = [
-                    max(1, (chunk_ranges[idx][1] - chunk_ranges[idx][0]) if idx < len(chunk_ranges) else 1)
-                    for idx in range(len(sub_chunks))
-                ]
-                total_weight = sum(weights) or 1
-                durs = [round(avail_dur * (w / total_weight), 3) for w in weights]
-            else:
-                durs = [5.0] * len(sub_chunks)
+        if base_chunks is None:
+            if len(durs) != len(sub_chunks):
+                if total_wav_dur > 0:
+                    pause_total = 0.150 * max(0, len(sub_chunks) - 1)
+                    avail_dur = max(0.1 * len(sub_chunks), total_wav_dur - pause_total)
+                    weights = [
+                        max(1, (chunk_ranges[idx][1] - chunk_ranges[idx][0]) if idx < len(chunk_ranges) else 1)
+                        for idx in range(len(sub_chunks))
+                    ]
+                    total_weight = sum(weights) or 1
+                    durs = [round(avail_dur * (w / total_weight), 3) for w in weights]
+                else:
+                    durs = [5.0] * len(sub_chunks)
 
-        chunks_info = []
-        curr_time = 0.0
-        for idx, c in enumerate(sub_chunks):
-            spk = list(dict.fromkeys(t["speaker"] for t in c))
-            dur = durs[idx]
-            start_sec = round(curr_time, 3)
-            end_sec = round(curr_time + dur, 3)
-            start_char, end_char = chunk_ranges[idx] if idx < len(chunk_ranges) else (0, 0)
-            chunks_info.append({
-                "chunk_index": idx,
-                "start_sec": start_sec,
-                "end_sec": end_sec,
-                "start_char": start_char,
-                "end_char": end_char,
-                "speakers": spk
-            })
-            curr_time = round(end_sec + 0.150, 3)
-        p["chunks"] = chunks_info
+            base_chunks = []
+            curr_time = 0.0
+            for idx, c in enumerate(sub_chunks):
+                spk = list(dict.fromkeys(t["speaker"] for t in c))
+                dur = durs[idx]
+                start_sec = round(curr_time, 3)
+                end_sec = round(curr_time + dur, 3)
+                start_char, end_char = chunk_ranges[idx] if idx < len(chunk_ranges) else (0, 0)
+                base_chunks.append({
+                    "chunk_index": idx,
+                    "start_sec": start_sec,
+                    "end_sec": end_sec,
+                    "start_char": start_char,
+                    "end_char": end_char,
+                    "speakers": spk
+                })
+                curr_time = round(end_sec + 0.150, 3)
+
+        subdivided_chunks = []
+        for bc in base_chunks:
+            for sc in split_chunk_across_subparagraphs(bc, translated_text, frames, sample_rate):
+                sc["chunk_index"] = len(subdivided_chunks)
+                subdivided_chunks.append(sc)
+        p["chunks"] = subdivided_chunks
 
 def export_results(metadata: StoryMetadata, audio_dir: Path, output_dir: str, source_lang: str, target_lang: str, level: str):
     """Orchestrates the export of HTML and MP3 files."""
