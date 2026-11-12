@@ -686,6 +686,76 @@ def test_mobile_status_speed_control_and_keyboard_shortcuts():
     assert data["drawerActiveAfterEsc"] is False
 
 
+def test_mobile_paragraph_ordering_and_spacing():
+    import subprocess
+    from pathlib import Path
+
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'T',
+            paragraphs: [
+                {id: 1, originalText: 'English first.\\n\\nEnglish second.', translatedText: 'Deutsch zuerst.\\n\\nDeutsch zweitens.', turns: [{speaker: 'Narrator', text: 'Deutsch zuerst.'}]}
+            ],
+            characters: [],
+            difficultWords: []
+        }))
+        .replace('__AUDIO_DATA_JSON__', '{}')
+        .replace('__PLAY_SVG_JSON__', '""')
+        .replace('__PAUSE_SVG_JSON__', '""')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '""');
+
+    const mockEl = (id) => ({
+        id, innerHTML: '', textContent: '', innerText: '', style: {}, dataset: {},
+        classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
+        addEventListener(){}, appendChild(){}, querySelectorAll(){ return []; },
+        closest(){ return null; }
+    });
+    const elements = {};
+    const getEl = (id) => {
+        if (!elements[id]) elements[id] = mockEl(id);
+        return elements[id];
+    };
+
+    const sandbox = {
+        document: {
+            getElementById: (id) => getEl(id),
+            querySelector: () => null,
+            querySelectorAll: () => [],
+            addEventListener: () => {},
+            documentElement: mockEl('html')
+        },
+        window: {
+            addEventListener: () => {},
+            location: { hash: '' },
+            matchMedia: () => ({ matches: false })
+        },
+        history: { replaceState(){} },
+        IntersectionObserver: function() { return { observe(){} }; },
+        console
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+
+    console.log(JSON.stringify({ storyHtml: getEl('story').innerHTML }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    story_html = json.loads(res.stdout.strip())["storyHtml"]
+    assert "gap-3 md:gap-12 items-start mb-10 last:mb-0" in story_html
+    assert "order-2 md:order-1" in story_html
+    assert "order-1 md:order-2" in story_html
+
+
+
 
 
 

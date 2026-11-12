@@ -610,3 +610,27 @@
             padding: 2px 3px;
             margin: 0 -3px;
         }
+        .subpara-grid {
+            gap: 0.75rem;
+            margin-bottom: 2.5rem;
+        }
+        .subpara-grid:last-child {
+            margin-bottom: 0;
+        }
+        .orig-col {
+            order: 2;
+        }
+        .trans-col {
+            order: 1;
+        }
+        @media (min-width: 768px) {
+            .subpara-grid {
+                gap: 3rem;
+            }
+            .orig-col {
+                order: 1;
+            }
+            .trans-col {
+                order: 2;
+            }
+        }

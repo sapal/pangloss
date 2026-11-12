@@ -231,9 +231,9 @@
                     const renderedTrans = renderTransRow(p, i, transPara, sortedWords, rowStart, rowEnd);
 
                     return `
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-start mb-8 last:mb-0">
-                            <div id="orig-${p.id}-${i}" class="text-base md:text-xl leading-relaxed font-serif opacity-70 transition-all duration-300 text-content">${md(origPara)}</div>
-                            <div id="trans-${p.id}-${i}" onclick="handleTransClick(event, ${p.id})" class="text-base md:text-xl leading-relaxed font-serif transition-all duration-300 text-content cursor-pointer">${renderedTrans}</div>
+                        <div class="subpara-grid grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-12 items-start mb-10 last:mb-0">
+                            <div id="orig-${p.id}-${i}" class="orig-col order-2 md:order-1 text-base md:text-xl leading-relaxed font-serif opacity-70 transition-all duration-300 text-content">${md(origPara)}</div>
+                            <div id="trans-${p.id}-${i}" onclick="handleTransClick(event, ${p.id})" class="trans-col order-1 md:order-2 text-base md:text-xl leading-relaxed font-serif transition-all duration-300 text-content cursor-pointer">${renderedTrans}</div>
                         </div>
                     `;
                 }).join('');
