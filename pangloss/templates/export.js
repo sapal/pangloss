@@ -129,6 +129,7 @@
         let holdTimer = null;
         let activeHoldEl = null;
         let didHoldOriginal = false;
+        let wasPlayingBeforeHold = false;
 
         function setReadingMode(mode) {
             readingMode = mode;
@@ -148,14 +149,19 @@
         }
 
         function startHoldOriginal(targetEl) {
-            if (readingMode !== 'hold-original') return;
+            if (readingMode !== 'hold-original' || !targetEl) return;
             didHoldOriginal = true;
-            if (targetEl && targetEl.classList) {
+            if (targetEl.classList) {
                 activeHoldEl = targetEl;
                 targetEl.classList.add('holding-original');
             }
-            if (document.documentElement && document.documentElement.classList) {
-                document.documentElement.classList.add('holding-original');
+            if (isPlaying) {
+                wasPlayingBeforeHold = true;
+                player.pause();
+                isPlaying = false;
+                updateUI(false);
+            } else {
+                wasPlayingBeforeHold = false;
             }
         }
 
@@ -164,26 +170,44 @@
                 clearTimeout(holdTimer);
                 holdTimer = null;
             }
+            const hadActiveHold = Boolean(activeHoldEl);
             if (activeHoldEl && activeHoldEl.classList) {
                 activeHoldEl.classList.remove('holding-original');
                 activeHoldEl = null;
             }
-            if (document.documentElement && document.documentElement.classList) {
-                document.documentElement.classList.remove('holding-original');
-            }
             document.querySelectorAll('.holding-original').forEach(el => {
                 el.classList.remove('holding-original');
             });
+            if (hadActiveHold && wasPlayingBeforeHold) {
+                wasPlayingBeforeHold = false;
+                player.play();
+                isPlaying = true;
+                updateUI(false);
+            } else {
+                wasPlayingBeforeHold = false;
+            }
         }
 
         function onSubparaHoldStart(e, el) {
             if (readingMode !== 'hold-original') return;
+            if (e && e.target && e.target.closest && e.target.closest('.word')) return;
             didHoldOriginal = false;
             if (holdTimer) clearTimeout(holdTimer);
             holdTimer = setTimeout(() => {
+                holdTimer = null;
                 startHoldOriginal(el);
             }, 220);
         }
+
+        document.addEventListener('mouseup', endHoldOriginal);
+        document.addEventListener('touchend', endHoldOriginal);
+        document.addEventListener('touchcancel', endHoldOriginal);
+        document.addEventListener('touchmove', () => {
+            if (holdTimer && !activeHoldEl) {
+                clearTimeout(holdTimer);
+                holdTimer = null;
+            }
+        }, { passive: true });
 
         let currentId = null;
         let isPlaying = false;
@@ -432,7 +456,7 @@
                     const renderedTrans = renderTransRow(p, i, transPara, sortedWords, rowStart, rowEnd);
 
                     return `
-                        <div class="subpara-grid grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-12 items-start mb-10 last:mb-0" onmousedown="onSubparaHoldStart(event, this)" ontouchstart="onSubparaHoldStart(event, this)" onmouseup="endHoldOriginal()" onmouseleave="endHoldOriginal()" ontouchend="endHoldOriginal()" ontouchcancel="endHoldOriginal()">
+                        <div class="subpara-grid grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-12 items-start mb-10 last:mb-0" onmousedown="onSubparaHoldStart(event, this)" ontouchstart="onSubparaHoldStart(event, this)" onmouseup="endHoldOriginal()" ontouchend="endHoldOriginal()" ontouchcancel="endHoldOriginal()">
                             <div id="orig-${p.id}-${i}" class="orig-col order-2 md:order-1 text-base md:text-xl leading-relaxed font-serif opacity-70 transition-all duration-300 text-content">${md(origPara)}</div>
                             <div id="trans-${p.id}-${i}" onclick="handleTransClick(event, ${p.id})" class="trans-col order-1 md:order-2 text-base md:text-xl leading-relaxed font-serif transition-all duration-300 text-content cursor-pointer">${renderedTrans}</div>
                         </div>
@@ -444,7 +468,7 @@
                         <div class="flex items-center gap-4 mb-8">
                             <span class="text-[10px] uppercase tracking-[2px] font-bold text-muted border-b border-accent/30 pb-1">${speakers}</span>
                             ${audioData[p.id] ? `
-                            <button onclick="playPara(${p.id})" class="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center hover:bg-accent hover:text-paper transition-all">
+                            <button onclick="playPara(${p.id})" class="w-8 h-8 rounded-full bg-accent/10 text-ink flex items-center justify-center hover:bg-accent hover:text-paper transition-all">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                             </button>
                             ` : ''}
@@ -460,8 +484,8 @@
 
             document.getElementById('castList').innerHTML = metadata.characters.map(char => `
                 <div class="flex gap-6">
-                    <div class="w-12 h-12 bg-paper border border-ink/10 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A5A40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                    <div class="w-12 h-12 bg-paper border border-ink/10 text-accent rounded-full flex items-center justify-center flex-shrink-0 shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
                     </div>
                     <div>
                         <p class="text-xl font-serif font-bold mb-1">${char.name}</p>

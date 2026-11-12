@@ -1535,6 +1535,175 @@ def test_searchable_lexicon_and_jump_to_word():
     assert data["scrollCount"] >= 1
 
 
+def test_dark_mode_contrast_mobile_icon_bar_and_hold_replace_pause():
+    import re
+    import subprocess
+    from pathlib import Path
+
+    metadata: StoryMetadata = {
+        "title": "Test Story",
+        "characters": [{"name": "Narrator", "description": "N", "voice": "Puck", "voiceProfile": "Calm"}],
+        "difficultWords": [],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "First sub.\n\nSecond sub.",
+                "translatedText": "Erster Teil.\n\nZweiter Teil.",
+                "turns": [{"speaker": "Narrator", "text": "Erster Teil.\n\nZweiter Teil."}]
+            }
+        ]
+    }
+    html_content = generate_html(metadata, {}, "English", "German", "B1")
+
+    # 1. Dark mode contrast: play button must override .bg-paper !important and #permanentControls .text-paper must stay light
+    assert re.search(r'html\[data-theme="dark"\]\s+#playToggle\s*\{[^}]*background-color:\s*#E8E4D9\s*!important', html_content)
+    assert re.search(r'html\[data-theme="dark"\]\s+#permanentControls\s+\.text-paper[^{]*\{[^}]*color:\s*#E8E4D9\s*!important', html_content)
+    assert 'fill="black"' not in html_content
+
+    # 2. Mobile portrait bar uses icon-only buttons (.dict-label hidden in mobile portrait)
+    portrait_match = re.search(
+        r'@media\s*\(max-width:\s*767px\)\s*and\s*\(orientation:\s*portrait\)\s*\{(.*?)\n\s{8}\}',
+        html_content,
+        re.DOTALL,
+    )
+    assert portrait_match is not None
+    portrait_css = portrait_match.group(1)
+    assert re.search(r'\.dict-label\s*\{\s*display:\s*none\s*!important;', portrait_css)
+
+    # 3. Hold-original CSS replaces .trans-col with .orig-col ONLY on the held .subpara-grid
+    assert re.search(
+        r'html\[data-reading-mode="hold-original"\]\s+\.subpara-grid\.holding-original\s+\.trans-col\s*\{\s*display:\s*none\s*!important;',
+        html_content,
+    )
+    assert 'html[data-reading-mode="hold-original"].holding-original .orig-col' not in html_content
+
+    # 4. Hold-original JS behavior:
+    #    - Only tapped sub-paragraph gets .holding-original (not documentElement or other sub-paragraphs)
+    #    - If audio was playing, holding pauses audio and lifting finger resumes audio
+    #    - If audio was NOT playing, holding and lifting finger does NOT start audio
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'T',
+            paragraphs: [
+                {id: 1, originalText: 'First.\\n\\nSecond.', translatedText: 'Erster.\\n\\nZweiter.', turns: [{speaker: 'Narrator', text: 'Erster.'}]}
+            ],
+            characters: [],
+            difficultWords: []
+        }))
+        .replace('__AUDIO_DATA_JSON__', JSON.stringify({1: 'data:audio/mp3;base64,AAA'}))
+        .replace('__PLAY_SVG_JSON__', '"PLAY"')
+        .replace('__PAUSE_SVG_JSON__', '"PAUSE"')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '""');
+
+    let playCalls = 0;
+    let pauseCalls = 0;
+    const mockEl = (id) => {
+        const classes = new Set();
+        return {
+            id, innerHTML: '', textContent: '', innerText: '', style: {}, dataset: {},
+            currentTime: 0, duration: 5, playbackRate: 1, src: '', clientHeight: 600, scrollTop: 0,
+            play(){ playCalls++; },
+            pause(){ pauseCalls++; },
+            scrollTo(){},
+            getBoundingClientRect(){ return { top: 0, height: 40, left: 0, right: 100 }; },
+            classList: {
+                add(...c){ c.forEach(x => classes.add(x)); },
+                remove(...c){ c.forEach(x => classes.delete(x)); },
+                toggle(x){ classes.has(x) ? classes.delete(x) : classes.add(x); },
+                contains(x){ return classes.has(x); }
+            },
+            addEventListener(){}, appendChild(){}, querySelectorAll(){ return []; },
+            querySelector(){ return null; }, closest(){ return null; }
+        };
+    };
+    const elements = {};
+    const getEl = (id) => {
+        if (!elements[id]) elements[id] = mockEl(id);
+        return elements[id];
+    };
+    const docEl = mockEl('html');
+    const subpara1 = mockEl('subpara-1');
+    const subpara2 = mockEl('subpara-2');
+
+    const sandbox = {
+        document: {
+            getElementById: (id) => getEl(id),
+            querySelector: () => null,
+            querySelectorAll: (sel) => sel === '.holding-original' ? [subpara1, subpara2].filter(el => el.classList.contains('holding-original')) : [],
+            addEventListener: () => {},
+            documentElement: docEl
+        },
+        window: {
+            addEventListener: () => {},
+            location: { hash: '' },
+            matchMedia: (q) => ({ matches: q.includes('max-width: 767px') && q.includes('orientation: portrait') })
+        },
+        history: { replaceState(){} },
+        IntersectionObserver: function() { return { observe(){} }; },
+        setTimeout: (fn) => { fn(); return 1; },
+        clearTimeout: () => {},
+        console
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+
+    // Case A: Audio is NOT playing -> hold subpara1 and release -> audio must NOT start
+    playCalls = 0;
+    pauseCalls = 0;
+    sandbox.startHoldOriginal(subpara1);
+    const sub1HeldWhenPaused = subpara1.classList.contains('holding-original');
+    const sub2HeldWhenPaused = subpara2.classList.contains('holding-original');
+    const docHeldWhenPaused = docEl.classList.contains('holding-original');
+    sandbox.endHoldOriginal();
+    const playCallsWhenNotPlaying = playCalls;
+    const pauseCallsWhenNotPlaying = pauseCalls;
+
+    // Case B: Audio IS playing -> hold subpara1 pauses audio -> release resumes audio
+    sandbox.playPara(1, true);
+    playCalls = 0;
+    pauseCalls = 0;
+    sandbox.startHoldOriginal(subpara1);
+    const pausedDuringHold = pauseCalls === 1 && getEl('playToggle').innerHTML === 'PLAY';
+    const sub1HeldWhilePlaying = subpara1.classList.contains('holding-original');
+    sandbox.endHoldOriginal();
+    const resumedAfterRelease = playCalls === 1 && getEl('playToggle').innerHTML === 'PAUSE';
+    const sub1ReleasedAfterHold = !subpara1.classList.contains('holding-original');
+
+    console.log(JSON.stringify({
+        sub1HeldWhenPaused,
+        sub2HeldWhenPaused,
+        docHeldWhenPaused,
+        playCallsWhenNotPlaying,
+        pauseCallsWhenNotPlaying,
+        pausedDuringHold,
+        sub1HeldWhilePlaying,
+        resumedAfterRelease,
+        sub1ReleasedAfterHold
+    }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    data = json.loads(res.stdout.strip())
+    assert data["sub1HeldWhenPaused"] is True
+    assert data["sub2HeldWhenPaused"] is False
+    assert data["docHeldWhenPaused"] is False
+    assert data["playCallsWhenNotPlaying"] == 0
+    assert data["pauseCallsWhenNotPlaying"] == 0
+    assert data["pausedDuringHold"] is True
+    assert data["sub1HeldWhilePlaying"] is True
+    assert data["resumedAfterRelease"] is True
+    assert data["sub1ReleasedAfterHold"] is True
+
+
 
 if __name__ == "__main__":
     try:

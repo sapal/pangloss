@@ -388,12 +388,33 @@
         html[data-theme="dark"] #permanentControls {
             background-color: #0E0E0C;
             color: #E8E4D9;
-            border-color: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.12);
         }
         html[data-theme="dark"] #playToggle {
-            background-color: #E8E4D9;
-            color: #161614;
+            background-color: #E8E4D9 !important;
+            color: #161614 !important;
         }
+        html[data-theme="dark"] #permanentControls .text-paper,
+        html[data-theme="dark"] #permanentControls .text-paper\/80,
+        html[data-theme="dark"] #status,
+        html[data-theme="dark"] #mobileStatus,
+        html[data-theme="dark"] #themeToggle,
+        html[data-theme="dark"] #readingModeToggle,
+        html[data-theme="dark"] #drawerToggle {
+            color: #E8E4D9 !important;
+        }
+        html[data-theme="dark"] #permanentControls .hover\:text-paper:hover:not(:disabled) {
+            color: #F9F7F2 !important;
+        }
+        html[data-theme="dark"] .border-ink\/5 { border-color: rgba(232, 228, 217, 0.08); }
+        html[data-theme="dark"] .border-ink\/10 { border-color: rgba(232, 228, 217, 0.15); }
+        html[data-theme="dark"] .bg-ink\/5 { background-color: rgba(232, 228, 217, 0.08); }
+        html[data-theme="dark"] .hover\:bg-ink\/5:hover { background-color: rgba(232, 228, 217, 0.1); }
+        html[data-theme="dark"] .hover\:bg-ink\/10:hover { background-color: rgba(232, 228, 217, 0.16); }
+        html[data-theme="dark"] .bg-accent\/5 { background-color: rgba(163, 163, 117, 0.08); }
+        html[data-theme="dark"] .bg-accent\/10 { background-color: rgba(163, 163, 117, 0.16); }
+        html[data-theme="dark"] .text-amber-900,
+        html[data-theme="dark"] .text-amber-800 { color: #FCD34D; }
         html[data-theme="dark"] .drawer {
             background-color: #1E1E1B !important;
             color: #E8E4D9;
@@ -489,31 +510,45 @@
             #permanentControls {
                 flex-direction: row !important;
                 width: 100% !important;
-                height: 76px !important;
+                height: 68px !important;
                 align-items: center !important;
                 justify-content: space-between !important;
-                padding: 0 16px !important;
+                padding: 0 10px !important;
+                gap: 6px !important;
                 border-top-width: 1px !important;
             }
             #playerButtonsContainer {
                 flex-direction: row !important;
                 justify-content: flex-end !important;
-                gap: 12px !important;
+                gap: 6px !important;
                 flex: 1 !important;
+                min-width: 0;
             }
             #navButtonsContainer {
                 flex-direction: row !important;
-                gap: 12px !important;
+                gap: 4px !important;
                 align-items: center !important;
             }
             #dictionaryContainer {
                 order: -1;
+                gap: 6px !important;
+            }
+            #themeToggle, #readingModeToggle, #drawerToggle {
+                padding: 8px !important;
             }
             .dict-label {
-                display: inline !important;
+                display: none !important;
             }
             #prevBtn .label-text, #nextBtn .label-text {
                 display: none !important;
+            }
+            #prevBtn, #nextBtn, #prevChunkBtn, #nextChunkBtn, #rewindBtn {
+                width: 28px !important;
+                height: 28px !important;
+                padding: 2px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
             }
             #prevBtn::before {
                 content: '';
@@ -536,8 +571,9 @@
                 margin-left: -2px;
             }
             #playToggle {
-                width: 44px !important;
-                height: 44px !important;
+                width: 40px !important;
+                height: 40px !important;
+                flex-shrink: 0 !important;
                 order: 2;
             }
             #playToggle svg {
@@ -698,22 +734,24 @@
         html[data-reading-mode="hold-original"] .subpara-grid {
             grid-template-columns: 1fr !important;
         }
-        html[data-reading-mode="hold-original"] .orig-col {
-            display: none;
-            order: 2 !important;
-            padding: 0.75rem 1rem;
-            border-left: 3px solid var(--accent);
-            background-color: var(--highlight);
-            border-radius: 0.5rem;
-            margin-top: 0.5rem;
-            opacity: 0.95 !important;
+        html[data-reading-mode="hold-original"] .subpara-grid .orig-col {
+            display: none !important;
+            order: 1 !important;
+            opacity: 1 !important;
         }
-        html[data-reading-mode="hold-original"] .trans-col {
+        html[data-reading-mode="hold-original"] .subpara-grid .trans-col {
+            display: block;
             order: 1 !important;
         }
-        html[data-reading-mode="hold-original"].holding-original .orig-col,
+        html[data-reading-mode="hold-original"] .subpara-grid.holding-original {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        html[data-reading-mode="hold-original"] .subpara-grid.holding-original .trans-col {
+            display: none !important;
+        }
         html[data-reading-mode="hold-original"] .subpara-grid.holding-original .orig-col {
-            display: block;
+            display: block !important;
         }
         .resume-autoscroll-pill {
             position: fixed;
