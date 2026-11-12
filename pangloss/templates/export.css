@@ -655,3 +655,33 @@
         html[data-reading-mode="hold-original"] .subpara-grid.holding-original .orig-col {
             display: block;
         }
+        .resume-autoscroll-pill {
+            position: fixed;
+            bottom: 92px;
+            left: 50%;
+            transform: translateX(-50%) translateY(12px);
+            z-index: 1500;
+            background-color: var(--ink);
+            color: var(--paper);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 9999px;
+            padding: 0.5rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+        .resume-autoscroll-pill.visible {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateX(-50%) translateY(0);
+        }
+        @media (min-width: 768px) {
+            .resume-autoscroll-pill {
+                bottom: 28px;
+                left: calc((100vw - 260px) / 2);
+            }
+        }

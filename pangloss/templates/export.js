@@ -15,6 +15,7 @@
         const readingModeLabel = document.getElementById('readingModeLabel');
         const rewindBtn = document.getElementById('rewindBtn');
         const speedBtn = document.getElementById('speedToggle');
+        const resumeAutoScrollBtn = document.getElementById('resumeAutoScrollBtn');
         const closeDrawer = document.getElementById('closeDrawer');
         
         const prevChunkBtn = document.getElementById('prevChunkBtn');
@@ -539,6 +540,7 @@
             if (hasTextSelection()) return;
             if (e && e.target && e.target.closest && e.target.closest('.word, .chunk-target')) return;
             if (currentId !== paraId || !isPlaying) {
+                setAutoScrollPaused(false);
                 playPara(paraId, currentId !== paraId);
             }
         }
@@ -550,6 +552,7 @@
                 return;
             }
             if (hasTextSelection()) return;
+            setAutoScrollPaused(false);
             if (currentId !== paraId) {
                 playPara(paraId, true);
             }
@@ -568,6 +571,7 @@
         }
 
         function prevChunk() {
+            setAutoScrollPaused(false);
             const info = getActiveChunkInfo();
             if (!info) {
                 const pIndex = metadata.paragraphs.findIndex(p => p.id === currentId);
@@ -604,6 +608,7 @@
         }
 
         function nextChunk() {
+            setAutoScrollPaused(false);
             const info = getActiveChunkInfo();
             if (!info) {
                 const pIndex = metadata.paragraphs.findIndex(p => p.id === currentId);
@@ -634,6 +639,43 @@
 
         let lastScrollTime = 0;
         let lastScrolledChunk = null;
+        let autoScrollPaused = false;
+
+        function setAutoScrollPaused(paused) {
+            autoScrollPaused = paused;
+            if (resumeAutoScrollBtn && resumeAutoScrollBtn.classList) {
+                if (paused) {
+                    resumeAutoScrollBtn.classList.add('visible');
+                } else {
+                    resumeAutoScrollBtn.classList.remove('visible');
+                }
+            }
+        }
+
+        function pauseAutoScrollOnUserScroll() {
+            if (isPlaying && !autoScrollPaused) {
+                setAutoScrollPaused(true);
+            }
+        }
+
+        if (scrollContainer && scrollContainer.addEventListener) {
+            scrollContainer.addEventListener('wheel', pauseAutoScrollOnUserScroll, { passive: true });
+            scrollContainer.addEventListener('touchmove', pauseAutoScrollOnUserScroll, { passive: true });
+        }
+
+        if (resumeAutoScrollBtn) {
+            resumeAutoScrollBtn.onclick = () => {
+                setAutoScrollPaused(false);
+                const info = getActiveChunkInfo();
+                if (info) {
+                    scrollToActiveChunk(info.chunk, true, true);
+                    lastScrolledChunk = info.chunkIndex;
+                } else {
+                    scrollToActiveText(true, true);
+                }
+            };
+        }
+
         player.addEventListener('timeupdate', () => {
             if (!isPlaying || currentId === null) return;
 
@@ -641,6 +683,8 @@
             if (info) {
                 highlightActiveChunk(info.chunkIndex);
             }
+
+            if (autoScrollPaused) return;
 
             const now = Date.now();
             const chunkChanged = info && (info.chunkIndex !== lastScrolledChunk);
@@ -707,13 +751,18 @@
                 if (section) {
                     section.classList.add('bg-accent/5', 'ring-1', 'ring-accent/10', 'shadow-sm', 'p-8', '-mx-8', 'rounded-2xl');
                     section.querySelectorAll('[id^="orig-"]').forEach(el => el.classList.remove('opacity-40'));
-                    if (autoScroll) {
+                    if (autoScroll && !autoScrollPaused) {
                         const info = getActiveChunkInfo();
                         if (info) {
                             highlightActiveChunk(info.chunkIndex);
                             scrollToActiveChunk(info.chunk, true, true);
                         } else {
                             scrollToActiveText(true, true);
+                        }
+                    } else if (autoScroll) {
+                        const info = getActiveChunkInfo();
+                        if (info) {
+                            highlightActiveChunk(info.chunkIndex);
                         }
                     }
                 }
@@ -760,11 +809,13 @@
         };
 
         prevBtn.onclick = () => {
+            setAutoScrollPaused(false);
             const index = metadata.paragraphs.findIndex(p => p.id === currentId);
             if (index > 0) playPara(metadata.paragraphs[index - 1].id);
         };
 
         nextBtn.onclick = () => {
+            setAutoScrollPaused(false);
             const index = metadata.paragraphs.findIndex(p => p.id === currentId);
             if (index < metadata.paragraphs.length - 1) playPara(metadata.paragraphs[index + 1].id);
         };
@@ -779,6 +830,7 @@
                 playPara(metadata.paragraphs[nextIndex].id);
             } else {
                 isPlaying = false;
+                setAutoScrollPaused(false);
                 currentId = null;
                 highlightActiveChunk(null);
                 updateUI();

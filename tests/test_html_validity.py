@@ -879,10 +879,138 @@ def test_reading_mode_side_by_side_vs_hold_to_see_original():
     assert data["mobilePortrait"]["holdingAfterRelease"] is False
 
 
+def test_smart_auto_scroll_detach_and_resume_pill():
+    import subprocess
+    from pathlib import Path
 
+    metadata: StoryMetadata = {
+        "title": "Test Story",
+        "characters": [{"name": "Narrator", "description": "N", "voice": "Puck", "voiceProfile": "Calm"}],
+        "difficultWords": [],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "One.",
+                "translatedText": "Eins.",
+                "turns": [{"speaker": "Narrator", "text": "Eins."}],
+                "chunks": [
+                    {"chunk_index": 0, "start_sec": 0.0, "end_sec": 5.0, "start_char": 0, "end_char": 5, "speakers": ["Narrator"]}
+                ]
+            }
+        ]
+    }
+    html_content = generate_html(metadata, {}, "English", "German", "B1")
+    assert 'id="resumeAutoScrollBtn"' in html_content
 
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'T',
+            paragraphs: [
+                {id: 1, originalText: 'One.', translatedText: 'Eins.', turns: [{speaker: 'Narrator', text: 'Eins.'}], chunks: [{chunk_index: 0, start_sec: 0, end_sec: 5, start_char: 0, end_char: 5, speakers: ['Narrator']}]}
+            ],
+            characters: [],
+            difficultWords: []
+        }))
+        .replace('__AUDIO_DATA_JSON__', JSON.stringify({1: 'data:audio/mp3;base64,AAA'}))
+        .replace('__PLAY_SVG_JSON__', '"PLAY"')
+        .replace('__PAUSE_SVG_JSON__', '"PAUSE"')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '"Resume Auto-Scroll"');
 
+    let scrollCalls = 0;
+    const mockEl = (id) => {
+        const classes = new Set();
+        const listeners = {};
+        return {
+            id, innerHTML: '', textContent: 'Eins.', innerText: '', style: {}, dataset: {},
+            currentTime: 1.0, duration: 5.0, playbackRate: 1.0, src: '',
+            clientHeight: 600, scrollTop: 0,
+            play(){}, pause(){},
+            scrollTo(){ scrollCalls++; },
+            getBoundingClientRect(){ return { top: id === 'scrollContainer' ? 0 : 800, height: 40, left: 0, right: 100 }; },
+            classList: {
+                add(...c){ c.forEach(x => classes.add(x)); },
+                remove(...c){ c.forEach(x => classes.delete(x)); },
+                toggle(x){ classes.has(x) ? classes.delete(x) : classes.add(x); },
+                contains(x){ return classes.has(x); }
+            },
+            addEventListener(evt, fn){
+                if (!listeners[evt]) listeners[evt] = [];
+                listeners[evt].push(fn);
+            },
+            trigger(evt, e = {}){
+                (listeners[evt] || []).forEach(fn => fn(e));
+            },
+            appendChild(){}, querySelectorAll(){ return []; },
+            closest(){ return null; }
+        };
+    };
+    const elements = {};
+    const getEl = (id) => {
+        if (!elements[id]) elements[id] = mockEl(id);
+        return elements[id];
+    };
+    const chunkEl = mockEl('chunk-0');
 
+    const sandbox = {
+        document: {
+            getElementById: (id) => getEl(id),
+            querySelector: () => null,
+            querySelectorAll: (sel) => sel.includes('chunk-p1-c0') ? [chunkEl] : [],
+            addEventListener: () => {},
+            documentElement: mockEl('html')
+        },
+        window: {
+            addEventListener: () => {},
+            location: { hash: '' },
+            matchMedia: () => ({ matches: false })
+        },
+        history: { replaceState(){} },
+        IntersectionObserver: function() { return { observe(){} }; },
+        Date: { now: () => 10000 },
+        console
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+
+    sandbox.playPara(1, true);
+    scrollCalls = 0;
+
+    // 1. User manually scrolls with wheel while playing -> auto-scroll detaches and pill becomes visible
+    getEl('scrollContainer').trigger('wheel', {});
+    const pillVisibleAfterWheel = getEl('resumeAutoScrollBtn').classList.contains('visible');
+
+    // 2. Subsequent timeupdate does NOT yank scroll while detached
+    getEl('player').trigger('timeupdate', {});
+    const scrollCallsWhileDetached = scrollCalls;
+
+    // 3. Clicking resumeAutoScrollBtn hides pill and scrolls back to active chunk
+    getEl('resumeAutoScrollBtn').onclick();
+    const pillVisibleAfterResume = getEl('resumeAutoScrollBtn').classList.contains('visible');
+    const scrollCallsAfterResume = scrollCalls;
+
+    console.log(JSON.stringify({
+        pillVisibleAfterWheel,
+        scrollCallsWhileDetached,
+        pillVisibleAfterResume,
+        scrollCallsAfterResume
+    }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    data = json.loads(res.stdout.strip())
+    assert data["pillVisibleAfterWheel"] is True
+    assert data["scrollCallsWhileDetached"] == 0
+    assert data["pillVisibleAfterResume"] is False
+    assert data["scrollCallsAfterResume"] >= 1
 
 
 
