@@ -541,7 +541,7 @@
                     }
                 }
             });
-        }, { threshold: 0.5 });
+        }, { root: scrollContainer, rootMargin: '-40% 0px -40% 0px', threshold: 0 });
 
         function updateUI(autoScroll = true) {
             document.querySelectorAll('[id^="section-"]').forEach(el => {
@@ -629,8 +629,10 @@
             }
         };
 
+        // Initial render for immediate visibility
+        render();
+
         window.addEventListener('load', () => {
-          render();
           const hash = window.location.hash;
           if (hash.startsWith('#section-')) {
               const id = parseInt(hash.replace('#section-', ''));
@@ -638,5 +640,3 @@
           }
           updateUI(true);
         });
-        // Initial render for immediate visibility
-        render();

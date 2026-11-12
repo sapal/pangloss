@@ -204,7 +204,7 @@ def test_unicode_word_boundaries_and_tooltip_escaping():
         .replace('__AUDIO_DATA_JSON__', '{}')
         .replace('__PLAY_SVG_JSON__', '""')
         .replace('__PAUSE_SVG_JSON__', '""')
-        .replace(/__[A-Z0-9_]+__/g, '""');
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '""');
 
     const mockEl = () => ({
         innerHTML: '', textContent: '', style: {}, dataset: {},
@@ -244,8 +244,8 @@ def test_unicode_word_boundaries_and_tooltip_escaping():
         ["node", "-e", node_script, str(export_js)],
         capture_output=True,
         text=True,
-        check=True,
     )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
     out = json.loads(res.stdout.strip())["out"]
     # Words starting/ending with umlauts/eszett must be matched and wrapped
     assert '<span class="word" onclick="toggleTooltip(event, this)">über<div' in out
@@ -257,6 +257,101 @@ def test_unicode_word_boundaries_and_tooltip_escaping():
     # Tooltip explanation must have HTML escaped
     assert "<script>" not in out
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in out
+
+
+def test_single_initial_render_and_intersection_observer_config():
+    import subprocess
+    from pathlib import Path
+
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'T',
+            paragraphs: [{id: 1, originalText: 'Hi', translatedText: 'Hallo', turns: [{speaker: 'Narrator', text: 'Hallo'}]}],
+            characters: [],
+            difficultWords: []
+        }))
+        .replace('__AUDIO_DATA_JSON__', '{}')
+        .replace('__PLAY_SVG_JSON__', '""')
+        .replace('__PAUSE_SVG_JSON__', '""')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '""');
+
+    let storySetCount = 0;
+    let observerOpts = null;
+    let observeCallCount = 0;
+    const loadListeners = [];
+
+    const mockEl = (id) => {
+        let _html = '';
+        return {
+            id,
+            get innerHTML() { return _html; },
+            set innerHTML(v) {
+                if (id === 'story') storySetCount++;
+                _html = v;
+            },
+            textContent: '', innerText: '', style: {}, dataset: {},
+            classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
+            addEventListener(){}, appendChild(){}, querySelectorAll(){ return []; },
+            closest(){ return null; }
+        };
+    };
+    const elements = {};
+    const getEl = (id) => {
+        if (!elements[id]) elements[id] = mockEl(id);
+        return elements[id];
+    };
+    const sectionEl = mockEl('section-1');
+
+    const sandbox = {
+        document: {
+            getElementById: (id) => getEl(id),
+            querySelector: () => null,
+            querySelectorAll: (sel) => sel === '[id^="section-"]' ? [sectionEl] : [],
+            addEventListener: () => {},
+            documentElement: mockEl('html')
+        },
+        window: {
+            addEventListener: (evt, fn) => { if (evt === 'load') loadListeners.push(fn); },
+            location: { hash: '' },
+            matchMedia: () => ({ matches: false })
+        },
+        history: { replaceState(){} },
+        IntersectionObserver: function(cb, opts) {
+            observerOpts = opts;
+            return { observe() { observeCallCount++; } };
+        },
+        console
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+    loadListeners.forEach(fn => fn());
+
+    console.log(JSON.stringify({
+        storySetCount,
+        observeCallCount,
+        hasScrollContainerRoot: observerOpts && observerOpts.root === getEl('scrollContainer'),
+        threshold: observerOpts ? observerOpts.threshold : null,
+        rootMargin: observerOpts ? observerOpts.rootMargin : null
+    }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    data = json.loads(res.stdout.strip())
+    assert data["storySetCount"] == 1, f"Expected storyEl.innerHTML to be set once on startup, got {data['storySetCount']}"
+    assert data["observeCallCount"] == 1, f"Expected section-1 to be observed once, got {data['observeCallCount']}"
+    assert data["hasScrollContainerRoot"] is True
+    assert data["threshold"] == 0
+    assert data["rootMargin"] == "-40% 0px -40% 0px"
+
 
 
 
