@@ -105,7 +105,7 @@
 
         function renderTransRow(p, rowIdx, rawText, sortedWords, rowStart, rowEnd) {
             if (!rawText) return "";
-            let cleanText = rawText.replace(/<[a-zA-Z\s_-]+>/g, "");
+            let cleanText = rawText.replace(/<[a-zA-Z\s_\/-]+>/g, "");
             const chunks = p.chunks;
             if (!chunks || chunks.length === 0) {
                 let html = md(cleanText);
@@ -118,29 +118,51 @@
                 return applyWords(html, sortedWords);
             }
 
+            const hMatch = cleanText.match(/^(#+)\s*(.*$)/);
+            const headingLevel = hMatch ? hMatch[1].length : 0;
+            const headingPrefixLen = hMatch ? (cleanText.length - hMatch[2].length) : 0;
+            const bodyText = hMatch ? hMatch[2] : cleanText;
+
             if (overlapping.length === 1) {
                 const c = overlapping[0];
-                const hMatch = cleanText.match(/^(#+)\s*(.*$)/);
-                if (hMatch) {
-                    const level = hMatch[1].length;
-                    let hContent = md(hMatch[2]);
-                    hContent = applyWords(hContent, sortedWords);
-                    return `<h${level}><span class="chunk-target chunk-p${p.id}-c${c.chunk_index}" data-para-id="${p.id}" data-chunk-idx="${c.chunk_index}" onclick="seekToChunk(event, ${p.id}, ${c.chunk_index})">${hContent}</span></h${level}>`;
-                } else {
-                    let content = md(cleanText);
-                    content = applyWords(content, sortedWords);
-                    return `<span class="chunk-target chunk-p${p.id}-c${c.chunk_index}" data-para-id="${p.id}" data-chunk-idx="${c.chunk_index}" onclick="seekToChunk(event, ${p.id}, ${c.chunk_index})">${content}</span>`;
-                }
+                let content = md(bodyText);
+                content = applyWords(content, sortedWords);
+                const spanHtml = `<span class="chunk-target chunk-p${p.id}-c${c.chunk_index}" data-para-id="${p.id}" data-chunk-idx="${c.chunk_index}" onclick="seekToChunk(event, ${p.id}, ${c.chunk_index})">${content}</span>`;
+                return headingLevel > 0 ? `<h${headingLevel}>${spanHtml}</h${headingLevel}>` : spanHtml;
             } else {
+                let inBold = false;
+                let inItalic = false;
                 const pieces = overlapping.map(c => {
                     const oStart = Math.max(rowStart, c.start_char);
                     const oEnd = Math.min(rowEnd, c.end_char);
-                    const segText = cleanText.slice(oStart - rowStart, oEnd - rowStart);
-                    let segHtml = md(segText);
+                    const sliceStart = Math.max(0, (oStart - rowStart) - headingPrefixLen);
+                    const sliceEnd = Math.max(0, (oEnd - rowStart) - headingPrefixLen);
+                    let segText = bodyText.slice(sliceStart, sliceEnd);
+
+                    const boldCount = (segText.match(/\*\*/g) || []).length;
+                    const singleStarText = segText.replace(/\*\*/g, "");
+                    const italicCount = (singleStarText.match(/\*/g) || []).length;
+
+                    let prefix = "";
+                    if (inBold) prefix += "**";
+                    if (inItalic) prefix += "*";
+
+                    const nextInBold = (inBold ? 1 + boldCount : boldCount) % 2 === 1;
+                    const nextInItalic = (inItalic ? 1 + italicCount : italicCount) % 2 === 1;
+
+                    let suffix = "";
+                    if (nextInItalic) suffix += "*";
+                    if (nextInBold) suffix += "**";
+
+                    inBold = nextInBold;
+                    inItalic = nextInItalic;
+
+                    let segHtml = md(prefix + segText + suffix);
                     segHtml = applyWords(segHtml, sortedWords);
                     return `<span class="chunk-target chunk-p${p.id}-c${c.chunk_index}" data-para-id="${p.id}" data-chunk-idx="${c.chunk_index}" onclick="seekToChunk(event, ${p.id}, ${c.chunk_index})">${segHtml}</span>`;
                 });
-                return pieces.join('');
+                const joined = pieces.join('');
+                return headingLevel > 0 ? `<h${headingLevel}>${joined}</h${headingLevel}>` : joined;
             }
         }
 
@@ -194,7 +216,7 @@
 
                 let pPos = 0;
                 const alignedContent = Array.from({ length: maxParas }).map((_, i) => {
-                    let origPara = (origParas[i] || "").replace(/<[a-zA-Z\s_-]+>/g, "");
+                    let origPara = (origParas[i] || "").replace(/<[a-zA-Z\s_\/-]+>/g, "");
                     let transPara = (transParas[i] || "");
 
                     const rowStart = pPos;

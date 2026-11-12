@@ -450,6 +450,92 @@ def test_original_text_click_and_text_selection_do_not_restart_audio():
     assert data["timeAfterNormalSeek"] == 0
 
 
+def test_closing_vocal_tags_and_multichunk_markdown_in_render_trans_row():
+    import subprocess
+    from pathlib import Path
+
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({title: 'T', paragraphs: [], characters: [], difficultWords: []}))
+        .replace('__AUDIO_DATA_JSON__', '{}')
+        .replace('__PLAY_SVG_JSON__', '""')
+        .replace('__PAUSE_SVG_JSON__', '""')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '""');
+
+    const mockEl = () => ({
+        innerHTML: '', textContent: '', innerText: '', style: {}, dataset: {},
+        classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
+        addEventListener(){}, appendChild(){}, querySelectorAll(){ return []; },
+        closest(){ return null; }
+    });
+    const sandbox = {
+        document: {
+            getElementById: () => mockEl(),
+            querySelector: () => null,
+            querySelectorAll: () => [],
+            addEventListener: () => {},
+            documentElement: mockEl()
+        },
+        window: {
+            addEventListener: () => {},
+            location: { hash: '' },
+            matchMedia: () => ({ matches: false })
+        },
+        history: { replaceState(){} },
+        IntersectionObserver: function() { return { observe(){} }; },
+        console
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+
+    // 1. Closing vocal tag </whisper> should be stripped
+    const pVocal = { id: 1, chunks: [] };
+    const outVocal = sandbox.renderTransRow(pVocal, 0, '<whisper>Geheimnis</whisper>', [], 0, 28);
+
+    // 2. Multi-chunk heading and multi-chunk italic emphasis
+    const headingText = '## Kapitel 18. Dominanzhierarchien';
+    const pHeading = {
+        id: 2,
+        chunks: [
+            { chunk_index: 0, start_sec: 0, end_sec: 1, start_char: 0, end_char: 15, speakers: ['Narrator'] },
+            { chunk_index: 1, start_sec: 1, end_sec: 2, start_char: 15, end_char: 34, speakers: ['Narrator'] }
+        ]
+    };
+    const outHeading = sandbox.renderTransRow(pHeading, 0, headingText, [], 0, headingText.length);
+
+    const italicText = '*Erster Teil und zweiter Teil*';
+    const pItalic = {
+        id: 3,
+        chunks: [
+            { chunk_index: 0, start_sec: 0, end_sec: 1, start_char: 0, end_char: 13, speakers: ['Narrator'] },
+            { chunk_index: 1, start_sec: 1, end_sec: 2, start_char: 13, end_char: 30, speakers: ['Narrator'] }
+        ]
+    };
+    const outItalic = sandbox.renderTransRow(pItalic, 0, italicText, [], 0, italicText.length);
+
+    console.log(JSON.stringify({ outVocal, outHeading, outItalic }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    data = json.loads(res.stdout.strip())
+    assert "</whisper>" not in data["outVocal"]
+    assert data["outVocal"] == "Geheimnis"
+    assert data["outHeading"].startswith("<h2>") and data["outHeading"].endswith("</h2>")
+    assert "##" not in data["outHeading"]
+    assert "*" not in data["outItalic"]
+    assert "<em>Erster Teil " in data["outItalic"]
+    assert "<em>und zweiter Teil</em>" in data["outItalic"]
+
+
+
 
 
 
