@@ -130,6 +130,9 @@
         let activeHoldEl = null;
         let didHoldOriginal = false;
         let wasPlayingBeforeHold = false;
+        let holdStartX = null;
+        let holdStartY = null;
+        let lastTouchTime = 0;
 
         function setReadingMode(mode) {
             readingMode = mode;
@@ -138,6 +141,16 @@
             }
             if (readingModeLabel) {
                 readingModeLabel.innerText = mode === 'hold-original' ? 'Hold for Orig' : 'Side-by-Side';
+            }
+            if (mode !== 'hold-original') {
+                if (typeof endHoldOriginal === 'function' && (activeHoldEl || holdTimer)) {
+                    endHoldOriginal();
+                }
+            } else if (typeof window !== 'undefined' && window.getSelection) {
+                try {
+                    const sel = window.getSelection();
+                    if (sel && sel.removeAllRanges) sel.removeAllRanges();
+                } catch (e) {}
             }
         }
         setReadingMode(readingMode);
@@ -148,13 +161,98 @@
             };
         }
 
+        function getCenteredSubparaAnchor(sectionEl) {
+            if (!sectionEl || !scrollContainer || !scrollContainer.getBoundingClientRect) return null;
+            const containerRect = scrollContainer.getBoundingClientRect();
+            if (!containerRect) return null;
+            const containerHeight = scrollContainer.clientHeight || containerRect.height || 0;
+            if (containerHeight <= 0) return null;
+            const viewportCenterY = containerRect.top + containerHeight / 2;
+
+            let candidates = [];
+            if (sectionEl.querySelectorAll) {
+                candidates = Array.from(sectionEl.querySelectorAll('.subpara-grid') || []);
+            }
+            if (candidates.length === 0) {
+                candidates = [sectionEl];
+            }
+
+            let bestEl = null;
+            let bestDist = Infinity;
+            let bestFraction = 0;
+            let bestExtraOffset = 0;
+
+            candidates.forEach(el => {
+                if (!el || !el.getBoundingClientRect) return;
+                const r = el.getBoundingClientRect();
+                if (!r || !r.height || r.height <= 0) return;
+                const top = r.top || 0;
+                const height = r.height;
+                const bottom = (typeof r.bottom === 'number') ? r.bottom : (top + height);
+
+                let dist = 0;
+                let fraction = 0;
+                let extraOffset = 0;
+                if (viewportCenterY >= top && viewportCenterY <= bottom) {
+                    dist = 0;
+                    fraction = (viewportCenterY - top) / height;
+                } else if (viewportCenterY < top) {
+                    dist = top - viewportCenterY;
+                    fraction = 0;
+                    extraOffset = viewportCenterY - top;
+                } else {
+                    dist = viewportCenterY - bottom;
+                    fraction = 1;
+                    extraOffset = viewportCenterY - bottom;
+                }
+
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestEl = el;
+                    bestFraction = fraction;
+                    bestExtraOffset = extraOffset;
+                }
+            });
+
+            if (!bestEl) return null;
+            return { el: bestEl, fraction: bestFraction, extraOffset: bestExtraOffset };
+        }
+
+        function restoreCenteredSubparaAnchor(anchor) {
+            if (!anchor || !anchor.el || !anchor.el.getBoundingClientRect) return;
+            if (!scrollContainer || !scrollContainer.getBoundingClientRect) return;
+            if (typeof scrollContainer.scrollTop !== 'number') return;
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const newRect = anchor.el.getBoundingClientRect();
+            if (!containerRect || !newRect) return;
+            const containerHeight = scrollContainer.clientHeight || containerRect.height || 0;
+            if (containerHeight <= 0) return;
+            const viewportCenterY = containerRect.top + containerHeight / 2;
+            const newPointY = (newRect.top || 0) + anchor.fraction * (newRect.height || 0) + (anchor.extraOffset || 0);
+            const delta = newPointY - viewportCenterY;
+            if (Math.abs(delta) > 0.5) {
+                scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollTop + delta);
+            }
+        }
+
         function startHoldOriginal(targetEl) {
             if (readingMode !== 'hold-original' || !targetEl) return;
-            didHoldOriginal = true;
-            if (targetEl.classList) {
-                activeHoldEl = targetEl;
-                targetEl.classList.add('holding-original');
+            const sectionEl = (targetEl.closest && targetEl.closest('[id^="section-"]')) || targetEl;
+            if (activeHoldEl && activeHoldEl !== sectionEl) {
+                endHoldOriginal();
             }
+            if (activeHoldEl === sectionEl) return;
+
+            didHoldOriginal = true;
+            holdStartX = null;
+            holdStartY = null;
+            const anchor = getCenteredSubparaAnchor(sectionEl);
+            if (sectionEl.classList) {
+                activeHoldEl = sectionEl;
+                sectionEl.classList.add('holding-original');
+            }
+            restoreCenteredSubparaAnchor(anchor);
+
             if (isPlaying) {
                 wasPlayingBeforeHold = true;
                 player.pause();
@@ -170,14 +268,21 @@
                 clearTimeout(holdTimer);
                 holdTimer = null;
             }
-            const hadActiveHold = Boolean(activeHoldEl);
-            if (activeHoldEl && activeHoldEl.classList) {
-                activeHoldEl.classList.remove('holding-original');
+            holdStartX = null;
+            holdStartY = null;
+            const heldSection = activeHoldEl;
+            const hadActiveHold = Boolean(heldSection);
+            const anchor = heldSection ? getCenteredSubparaAnchor(heldSection) : null;
+            if (heldSection && heldSection.classList) {
+                heldSection.classList.remove('holding-original');
                 activeHoldEl = null;
             }
             document.querySelectorAll('.holding-original').forEach(el => {
                 el.classList.remove('holding-original');
             });
+            if (anchor) {
+                restoreCenteredSubparaAnchor(anchor);
+            }
             if (hadActiveHold && wasPlayingBeforeHold) {
                 wasPlayingBeforeHold = false;
                 player.play();
@@ -188,10 +293,23 @@
             }
         }
 
-        function onSubparaHoldStart(e, el) {
+        function onSectionHoldStart(e, el) {
             if (readingMode !== 'hold-original') return;
-            if (e && e.target && e.target.closest && e.target.closest('.word')) return;
+            const now = Date.now();
+            if (e && e.type === 'touchstart') {
+                lastTouchTime = now;
+            } else if (e && e.type === 'mousedown' && (now - lastTouchTime) < 500) {
+                return;
+            }
+            if (e && e.target && e.target.closest && e.target.closest('.word, button, a, input')) return;
             didHoldOriginal = false;
+            if (e && e.touches && e.touches.length > 0) {
+                holdStartX = e.touches[0].clientX;
+                holdStartY = e.touches[0].clientY;
+            } else {
+                holdStartX = null;
+                holdStartY = null;
+            }
             if (holdTimer) clearTimeout(holdTimer);
             holdTimer = setTimeout(() => {
                 holdTimer = null;
@@ -199,15 +317,48 @@
             }, 220);
         }
 
+        function onSubparaHoldStart(e, el) {
+            return onSectionHoldStart(e, el);
+        }
+
+        if (storyEl && storyEl.addEventListener) {
+            storyEl.addEventListener('contextmenu', (e) => {
+                if (readingMode === 'hold-original' && e && e.preventDefault) {
+                    e.preventDefault();
+                }
+            });
+            storyEl.addEventListener('selectstart', (e) => {
+                if (readingMode === 'hold-original' && e && e.preventDefault) {
+                    e.preventDefault();
+                }
+            });
+        }
+
         document.addEventListener('mouseup', endHoldOriginal);
-        document.addEventListener('touchend', endHoldOriginal);
-        document.addEventListener('touchcancel', endHoldOriginal);
-        document.addEventListener('touchmove', () => {
+        document.addEventListener('touchend', () => {
+            lastTouchTime = Date.now();
+            endHoldOriginal();
+        });
+        document.addEventListener('touchcancel', () => {
+            lastTouchTime = Date.now();
+            endHoldOriginal();
+        });
+        document.addEventListener('touchmove', (e) => {
             if (holdTimer && !activeHoldEl) {
+                if (holdStartX !== null && holdStartY !== null && e && e.touches && e.touches.length > 0) {
+                    const dx = e.touches[0].clientX - holdStartX;
+                    const dy = e.touches[0].clientY - holdStartY;
+                    if (dx * dx + dy * dy <= 100) return;
+                }
                 clearTimeout(holdTimer);
                 holdTimer = null;
+                holdStartX = null;
+                holdStartY = null;
             }
         }, { passive: true });
+        if (typeof window !== 'undefined' && window.addEventListener) {
+            window.addEventListener('blur', endHoldOriginal);
+        }
 
         let currentId = null;
         let isPlaying = false;
@@ -471,7 +622,7 @@
                     const renderedTrans = renderTransRow(p, i, transPara, sortedWords, rowStart, rowEnd);
 
                     return `
-                        <div class="subpara-grid grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-12 items-start mb-10 last:mb-0" onmousedown="onSubparaHoldStart(event, this)" ontouchstart="onSubparaHoldStart(event, this)" onmouseup="endHoldOriginal()" ontouchend="endHoldOriginal()" ontouchcancel="endHoldOriginal()">
+                        <div class="subpara-grid grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-12 items-start mb-10 last:mb-0">
                             <div id="orig-${p.id}-${i}" class="orig-col order-2 md:order-1 text-base md:text-xl leading-relaxed font-serif opacity-70 transition-all duration-300 text-content">${md(origPara)}</div>
                             <div id="trans-${p.id}-${i}" onclick="handleTransClick(event, ${p.id})" class="trans-col order-1 md:order-2 text-base md:text-xl leading-relaxed font-serif transition-all duration-300 text-content cursor-pointer">${renderedTrans}</div>
                         </div>
@@ -479,7 +630,7 @@
                 }).join('');
 
                 return `
-                    <div class="group/row border-b border-ink/5 pt-12 pb-12 transition-all first:pt-0" id="section-${p.id}">
+                    <div class="group/row border-b border-ink/5 pt-12 pb-12 transition-all first:pt-0" id="section-${p.id}" onmousedown="onSectionHoldStart(event, this)" ontouchstart="onSectionHoldStart(event, this)">
                         <div class="flex items-center gap-4 mb-8">
                             <span class="text-[10px] uppercase tracking-[2px] font-bold text-muted border-b border-accent/30 pb-1">${speakers}</span>
                             ${audioData[p.id] ? `
@@ -987,7 +1138,7 @@
         }
 
         const observer = new IntersectionObserver((entries) => {
-            if (isPlaying) return;
+            if (isPlaying || activeHoldEl) return;
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
                     const id = parseInt(entry.target.id.replace('section-', ''));

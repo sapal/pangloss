@@ -1570,15 +1570,19 @@ def test_dark_mode_contrast_mobile_icon_bar_and_hold_replace_pause():
     portrait_css = portrait_match.group(1)
     assert re.search(r'\.dict-label\s*\{\s*display:\s*none\s*!important;', portrait_css)
 
-    # 3. Hold-original CSS replaces .trans-col with .orig-col ONLY on the held .subpara-grid
+    # 3. Hold-original CSS replaces .trans-col with .orig-col ONLY on the held section ([id^="section-"].holding-original)
     assert re.search(
-        r'html\[data-reading-mode="hold-original"\]\s+\.subpara-grid\.holding-original\s+\.trans-col\s*\{\s*display:\s*none\s*!important;',
+        r'html\[data-reading-mode="hold-original"\]\s+\[id\^="section-"\]\.holding-original\s+\.trans-col\s*\{\s*display:\s*none\s*!important;',
+        html_content,
+    )
+    assert re.search(
+        r'html\[data-reading-mode="hold-original"\]\s+\[id\^="section-"\]\.holding-original\s+\.orig-col\s*\{\s*display:\s*block\s*!important;',
         html_content,
     )
     assert 'html[data-reading-mode="hold-original"].holding-original .orig-col' not in html_content
 
     # 4. Hold-original JS behavior:
-    #    - Only tapped sub-paragraph gets .holding-original (not documentElement or other sub-paragraphs)
+    #    - Only tapped section gets .holding-original (not documentElement or other sections)
     #    - If audio was playing, holding pauses audio and lifting finger resumes audio
     #    - If audio was NOT playing, holding and lifting finger does NOT start audio
     export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
@@ -1627,14 +1631,16 @@ def test_dark_mode_contrast_mobile_icon_bar_and_hold_replace_pause():
         return elements[id];
     };
     const docEl = mockEl('html');
+    const section1 = mockEl('section-1');
+    const section2 = mockEl('section-2');
     const subpara1 = mockEl('subpara-1');
-    const subpara2 = mockEl('subpara-2');
+    subpara1.closest = (sel) => sel === '[id^="section-"]' ? section1 : null;
 
     const sandbox = {
         document: {
             getElementById: (id) => getEl(id),
             querySelector: () => null,
-            querySelectorAll: (sel) => sel === '.holding-original' ? [subpara1, subpara2].filter(el => el.classList.contains('holding-original')) : [],
+            querySelectorAll: (sel) => sel === '.holding-original' ? [section1, section2].filter(el => el.classList.contains('holding-original')) : [],
             addEventListener: () => {},
             documentElement: docEl
         },
@@ -1652,38 +1658,38 @@ def test_dark_mode_contrast_mobile_icon_bar_and_hold_replace_pause():
     vm.createContext(sandbox);
     vm.runInContext(code, sandbox);
 
-    // Case A: Audio is NOT playing -> hold subpara1 and release -> audio must NOT start
+    // Case A: Audio is NOT playing -> hold subpara1 (inside section-1) and release -> audio must NOT start
     playCalls = 0;
     pauseCalls = 0;
     sandbox.startHoldOriginal(subpara1);
-    const sub1HeldWhenPaused = subpara1.classList.contains('holding-original');
-    const sub2HeldWhenPaused = subpara2.classList.contains('holding-original');
+    const sec1HeldWhenPaused = section1.classList.contains('holding-original');
+    const sec2HeldWhenPaused = section2.classList.contains('holding-original');
     const docHeldWhenPaused = docEl.classList.contains('holding-original');
     sandbox.endHoldOriginal();
     const playCallsWhenNotPlaying = playCalls;
     const pauseCallsWhenNotPlaying = pauseCalls;
 
-    // Case B: Audio IS playing -> hold subpara1 pauses audio -> release resumes audio
+    // Case B: Audio IS playing -> hold section-1 pauses audio -> release resumes audio
     sandbox.playPara(1, true);
     playCalls = 0;
     pauseCalls = 0;
     sandbox.startHoldOriginal(subpara1);
     const pausedDuringHold = pauseCalls === 1 && getEl('playToggle').innerHTML === 'PLAY';
-    const sub1HeldWhilePlaying = subpara1.classList.contains('holding-original');
+    const sec1HeldWhilePlaying = section1.classList.contains('holding-original');
     sandbox.endHoldOriginal();
     const resumedAfterRelease = playCalls === 1 && getEl('playToggle').innerHTML === 'PAUSE';
-    const sub1ReleasedAfterHold = !subpara1.classList.contains('holding-original');
+    const sec1ReleasedAfterHold = !section1.classList.contains('holding-original');
 
     console.log(JSON.stringify({
-        sub1HeldWhenPaused,
-        sub2HeldWhenPaused,
+        sec1HeldWhenPaused,
+        sec2HeldWhenPaused,
         docHeldWhenPaused,
         playCallsWhenNotPlaying,
         pauseCallsWhenNotPlaying,
         pausedDuringHold,
-        sub1HeldWhilePlaying,
+        sec1HeldWhilePlaying,
         resumedAfterRelease,
-        sub1ReleasedAfterHold
+        sec1ReleasedAfterHold
     }));
     """
     res = subprocess.run(
@@ -1693,15 +1699,306 @@ def test_dark_mode_contrast_mobile_icon_bar_and_hold_replace_pause():
     )
     assert res.returncode == 0, f"Node failed: {res.stderr}"
     data = json.loads(res.stdout.strip())
-    assert data["sub1HeldWhenPaused"] is True
-    assert data["sub2HeldWhenPaused"] is False
+    assert data["sec1HeldWhenPaused"] is True
+    assert data["sec2HeldWhenPaused"] is False
     assert data["docHeldWhenPaused"] is False
     assert data["playCallsWhenNotPlaying"] == 0
     assert data["pauseCallsWhenNotPlaying"] == 0
     assert data["pausedDuringHold"] is True
-    assert data["sub1HeldWhilePlaying"] is True
+    assert data["sec1HeldWhilePlaying"] is True
     assert data["resumedAfterRelease"] is True
-    assert data["sub1ReleasedAfterHold"] is True
+    assert data["sec1ReleasedAfterHold"] is True
+
+
+def test_hold_original_disables_selection_switches_whole_section_and_preserves_scroll_center():
+    import re
+    import subprocess
+    from pathlib import Path
+
+    metadata: StoryMetadata = {
+        "title": "Test Story",
+        "characters": [{"name": "Narrator", "description": "N", "voice": "Puck", "voiceProfile": "Calm"}],
+        "difficultWords": [],
+        "paragraphs": [
+            {
+                "id": 1,
+                "originalText": "First sub.\n\nSecond sub.\n\nThird sub.",
+                "translatedText": "Erster Teil.\n\nZweiter Teil.\n\nDritter Teil.",
+                "turns": [{"speaker": "Narrator", "text": "Erster Teil.\n\nZweiter Teil.\n\nDritter Teil."}],
+            }
+        ],
+    }
+    html_content = generate_html(metadata, {}, "English", "German", "B1")
+
+    # 1. CSS checks:
+    # - Text selection & touch callout disabled ONLY in hold-original mode on #story (not globally on #story)
+    # - overflow-anchor: none in hold-original mode
+    # - Whole section switching via [id^="section-"].holding-original
+    style_match = re.search(r"<style>(.*?)</style>", html_content, re.DOTALL)
+    assert style_match is not None
+    css = style_match.group(1)
+
+    assert re.search(
+        r'html\[data-reading-mode="hold-original"\]\s+#story,\s*html\[data-reading-mode="hold-original"\]\s+#story\s+\*\s*\{[^}]*user-select:\s*none;[^}]*-webkit-user-select:\s*none;[^}]*-webkit-touch-callout:\s*none;',
+        css,
+        re.DOTALL,
+    )
+    assert re.search(
+        r'html\[data-reading-mode="hold-original"\]\s+#scrollContainer\s*\{[^}]*overflow-anchor:\s*none;',
+        css,
+        re.DOTALL,
+    )
+    assert re.search(
+        r'html\[data-reading-mode="hold-original"\]\s+\[id\^="section-"\]\.holding-original\s+\.trans-col\s*\{\s*display:\s*none\s*!important;',
+        css,
+    )
+    assert re.search(
+        r'html\[data-reading-mode="hold-original"\]\s+\[id\^="section-"\]\.holding-original\s+\.orig-col\s*\{\s*display:\s*block\s*!important;',
+        css,
+    )
+    # Must NOT disable user-select unconditionally on #story outside hold-original mode
+    assert not re.search(r'(?<!hold-original"\]\s)#story\s*\{[^}]*user-select:\s*none', css)
+
+    # 2. Node VM behavioral checks for export.js
+    export_js = Path(__file__).parent.parent / "pangloss" / "templates" / "export.js"
+    node_script = """
+    const fs = require('fs');
+    const vm = require('vm');
+    let code = fs.readFileSync(process.argv[1], 'utf8');
+    code = code
+        .replace('__METADATA_JSON__', JSON.stringify({
+            title: 'T',
+            paragraphs: [
+                {
+                    id: 1,
+                    originalText: 'First sub.\\n\\nSecond sub.\\n\\nThird sub.',
+                    translatedText: 'Erster Teil.\\n\\nZweiter Teil.\\n\\nDritter Teil.',
+                    turns: [{speaker: 'Narrator', text: 'Erster Teil.'}]
+                },
+                {
+                    id: 2,
+                    originalText: 'Next section.',
+                    translatedText: 'Nächster Abschnitt.',
+                    turns: [{speaker: 'Narrator', text: 'Nächster Abschnitt.'}]
+                }
+            ],
+            characters: [],
+            difficultWords: []
+        }))
+        .replace('__AUDIO_DATA_JSON__', JSON.stringify({1: 'data:audio/mp3;base64,AAA'}))
+        .replace('__PLAY_SVG_JSON__', '"PLAY"')
+        .replace('__PAUSE_SVG_JSON__', '"PAUSE"')
+        .replace(/__[A-Z][A-Z0-9_]*__/g, '""');
+
+    const docListeners = {};
+    const winListeners = {};
+    const makeMockEl = (id) => {
+        const classes = new Set();
+        const listeners = {};
+        return {
+            id, innerHTML: '', textContent: '', innerText: '', style: {}, dataset: {},
+            currentTime: 0, duration: 5, playbackRate: 1, src: '', clientHeight: 600, scrollTop: 0,
+            play(){},
+            pause(){},
+            scrollTo(){},
+            getBoundingClientRect(){ return { top: 0, bottom: 600, height: 600, left: 0, right: 400, width: 400 }; },
+            classList: {
+                add(...c){ c.forEach(x => classes.add(x)); },
+                remove(...c){ c.forEach(x => classes.delete(x)); },
+                toggle(x){ classes.has(x) ? classes.delete(x) : classes.add(x); },
+                contains(x){ return classes.has(x); }
+            },
+            addEventListener(evt, fn){
+                if (!listeners[evt]) listeners[evt] = [];
+                listeners[evt].push(fn);
+            },
+            trigger(evt, e = {}){
+                (listeners[evt] || []).forEach(fn => fn(e));
+            },
+            appendChild(){},
+            querySelectorAll(){ return []; },
+            querySelector(){ return null; },
+            closest(){ return null; }
+        };
+    };
+
+    const elements = {};
+    const getEl = (id) => {
+        if (!elements[id]) elements[id] = makeMockEl(id);
+        return elements[id];
+    };
+    const docEl = makeMockEl('html');
+    const scrollContainer = getEl('scrollContainer');
+    scrollContainer.clientHeight = 600;
+    scrollContainer.scrollTop = 500;
+    scrollContainer.getBoundingClientRect = () => ({ top: 0, bottom: 600, height: 600, left: 0, right: 400, width: 400 });
+
+    const section1 = makeMockEl('section-1');
+    const section2 = makeMockEl('section-2');
+    const subLayoutTrans = [
+        { contentTop: 100, height: 300 },
+        { contentTop: 440, height: 200 },
+        { contentTop: 680, height: 300 }
+    ];
+    const subLayoutOrig = [
+        { contentTop: 100, height: 200 },
+        { contentTop: 340, height: 150 },
+        { contentTop: 530, height: 250 }
+    ];
+    const subs = [0, 1, 2].map(idx => {
+        const sub = makeMockEl('sub-' + idx);
+        sub.closest = (sel) => sel === '[id^="section-"]' ? section1 : null;
+        sub.getBoundingClientRect = () => {
+            const layout = section1.classList.contains('holding-original') ? subLayoutOrig[idx] : subLayoutTrans[idx];
+            const top = layout.contentTop - scrollContainer.scrollTop;
+            return { top, bottom: top + layout.height, height: layout.height, left: 0, right: 400, width: 400 };
+        };
+        return sub;
+    });
+    section1.querySelectorAll = (sel) => sel === '.subpara-grid' ? subs : [];
+
+    let nextTimerId = 1;
+    const activeTimers = {};
+    const sandbox = {
+        document: {
+            getElementById: (id) => getEl(id),
+            querySelector: () => null,
+            querySelectorAll: (sel) => {
+                if (sel === '.holding-original') return [section1, section2].filter(el => el.classList.contains('holding-original'));
+                return [];
+            },
+            addEventListener: (evt, fn) => {
+                if (!docListeners[evt]) docListeners[evt] = [];
+                docListeners[evt].push(fn);
+            },
+            documentElement: docEl
+        },
+        window: {
+            addEventListener: (evt, fn) => {
+                if (!winListeners[evt]) winListeners[evt] = [];
+                winListeners[evt].push(fn);
+            },
+            location: { hash: '' },
+            matchMedia: (q) => ({ matches: q.includes('max-width: 767px') && q.includes('orientation: portrait') }),
+            getSelection: () => ({ toString: () => '', removeAllRanges(){} })
+        },
+        history: { replaceState(){} },
+        IntersectionObserver: function() { return { observe(){} }; },
+        setTimeout: (fn) => {
+            const id = nextTimerId++;
+            activeTimers[id] = () => {
+                delete activeTimers[id];
+                fn();
+            };
+            return id;
+        },
+        clearTimeout: (id) => { delete activeTimers[id]; },
+        Date: { now: () => 10000 },
+        console
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+
+    // A) Check rendered HTML wires onSectionHoldStart on section-[id]
+    const storyHtml = getEl('story').innerHTML;
+    const renderedHasSectionHold = storyHtml.includes('id="section-1"') && storyHtml.includes('onSectionHoldStart');
+
+    // B) Selection and contextmenu prevention ONLY in hold-original mode
+    const storyEl = getEl('story');
+    const makeEvt = (type, extra = {}) => {
+        const evt = Object.assign({ type, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, target: subs[1] }, extra);
+        return evt;
+    };
+    const selHoldEvt = makeEvt('selectstart');
+    const ctxHoldEvt = makeEvt('contextmenu');
+    storyEl.trigger('selectstart', selHoldEvt);
+    storyEl.trigger('contextmenu', ctxHoldEvt);
+
+    // Switch to side-by-side mode -> must allow selectstart & contextmenu
+    getEl('readingModeToggle').onclick();
+    const selSideEvt = makeEvt('selectstart');
+    const ctxSideEvt = makeEvt('contextmenu');
+    storyEl.trigger('selectstart', selSideEvt);
+    storyEl.trigger('contextmenu', ctxSideEvt);
+
+    // Switch back to hold-original mode
+    getEl('readingModeToggle').onclick();
+
+    // C) Small touch jitter (<= 10px) does NOT cancel pending hold; large movement (> 10px) DOES cancel
+    sandbox.onSectionHoldStart(makeEvt('touchstart', { touches: [{ clientX: 100, clientY: 200 }] }), section1);
+    const timerBeforeJitter = Object.keys(activeTimers).length === 1;
+    (docListeners['touchmove'] || []).forEach(fn => fn({ touches: [{ clientX: 102, clientY: 202 }] }));
+    const timerSurvivedJitter = Object.keys(activeTimers).length === 1;
+
+    // Trigger captured timer -> whole section1 switches to holding-original, scrollTop adjusts to preserve center on sub[2] fraction 0.4!
+    // Initially: scrollTop=500, centerY=300 => sub[2] translated is top=180, height=300 => fraction=(300-180)/300 = 0.4.
+    // Original sub[2]: contentTop=530, height=250 => 0.4*250 = 100 below top => desired rect.top = 200 => scrollTop = 530 - 200 = 330.
+    const pendingFn = Object.values(activeTimers)[0];
+    if (pendingFn) pendingFn();
+    const sec1HeldAfterTimer = section1.classList.contains('holding-original');
+    const sec2HeldAfterTimer = section2.classList.contains('holding-original');
+    const docHeldAfterTimer = docEl.classList.contains('holding-original');
+    const scrollTopWhileHolding = scrollContainer.scrollTop;
+    const sub2RectWhileHolding = subs[2].getBoundingClientRect();
+    const sub2CenterPointWhileHolding = sub2RectWhileHolding.top + 0.4 * sub2RectWhileHolding.height;
+
+    // Release hold -> switches back to translated and adjusts scrollTop back to 500
+    sandbox.endHoldOriginal();
+    const sec1ReleasedAfterEnd = !section1.classList.contains('holding-original');
+    const scrollTopAfterRelease = scrollContainer.scrollTop;
+    const sub2RectAfterRelease = subs[2].getBoundingClientRect();
+    const sub2CenterPointAfterRelease = sub2RectAfterRelease.top + 0.4 * sub2RectAfterRelease.height;
+
+    // Large touchmove (> 10px) cancels pending timer
+    sandbox.onSectionHoldStart(makeEvt('touchstart', { touches: [{ clientX: 100, clientY: 200 }] }), section1);
+    const timerStartedForScrollTest = Object.keys(activeTimers).length > 0;
+    (docListeners['touchmove'] || []).forEach(fn => fn({ touches: [{ clientX: 100, clientY: 230 }] }));
+    const timerClearedAfterLargeMove = Object.keys(activeTimers).length === 0;
+
+    console.log(JSON.stringify({
+        renderedHasSectionHold,
+        selectPreventedInHold: selHoldEvt.defaultPrevented,
+        ctxPreventedInHold: ctxHoldEvt.defaultPrevented,
+        selectPreventedInSide: selSideEvt.defaultPrevented,
+        ctxPreventedInSide: ctxSideEvt.defaultPrevented,
+        timerBeforeJitter,
+        timerSurvivedJitter,
+        sec1HeldAfterTimer,
+        sec2HeldAfterTimer,
+        docHeldAfterTimer,
+        scrollTopWhileHolding,
+        sub2CenterPointWhileHolding,
+        sec1ReleasedAfterEnd,
+        scrollTopAfterRelease,
+        sub2CenterPointAfterRelease,
+        timerStartedForScrollTest,
+        timerClearedAfterLargeMove
+    }));
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(export_js)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node failed: {res.stderr}"
+    data = json.loads(res.stdout.strip())
+    assert data["renderedHasSectionHold"] is True
+    assert data["selectPreventedInHold"] is True
+    assert data["ctxPreventedInHold"] is True
+    assert data["selectPreventedInSide"] is False
+    assert data["ctxPreventedInSide"] is False
+    assert data["timerBeforeJitter"] is True
+    assert data["timerSurvivedJitter"] is True
+    assert data["sec1HeldAfterTimer"] is True
+    assert data["sec2HeldAfterTimer"] is False
+    assert data["docHeldAfterTimer"] is False
+    assert abs(data["scrollTopWhileHolding"] - 330) <= 1
+    assert abs(data["sub2CenterPointWhileHolding"] - 300) <= 1
+    assert data["sec1ReleasedAfterEnd"] is True
+    assert abs(data["scrollTopAfterRelease"] - 500) <= 1
+    assert abs(data["sub2CenterPointAfterRelease"] - 300) <= 1
+    assert data["timerStartedForScrollTest"] is True
+    assert data["timerClearedAfterLargeMove"] is True
 
 
 
