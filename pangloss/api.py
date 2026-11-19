@@ -226,9 +226,9 @@ class _MockResponse:
 
 class GeminiAPI:
     PRICING = {
-        "gemini-3.7-flash": {
-            "input": 1.50 / 1_000_000,
-            "output": 9.00 / 1_000_000,
+        "gemini-3.8-flash": {
+            "input": 0.75 / 1_000_000,
+            "output": 3.75 / 1_000_000,
         },
         "gemini-3.8-flash-tts": {
             "input": 0.50 / 1_000_000,
@@ -237,6 +237,11 @@ class GeminiAPI:
         "gemini-3.8-flash-lite-tts": {
             "input": 0.50 / 1_000_000,
             "output": 6.00 / 1_000_000,
+        },
+        # Legacy model kept for backward-compatible resumed metadata cost accounting
+        "gemini-3.7-flash": {
+            "input": 1.50 / 1_000_000,
+            "output": 9.00 / 1_000_000,
         },
     }
 
@@ -248,9 +253,10 @@ class GeminiAPI:
         if self.dump_requests:
             os.makedirs(self.dump_requests, exist_ok=True)
         self.client = genai.Client(api_key=api_key or "dry_run_key")
+        self.text_model = "gemini-3.8-flash"
         self.tts_model = "gemini-3.8-flash-lite-tts" if lite else "gemini-3.8-flash-tts"
         self.usage = {
-            "gemini-3.7-flash": {"input_tokens": 0, "output_tokens": 0},
+            "gemini-3.8-flash": {"input_tokens": 0, "output_tokens": 0},
             "gemini-3.8-flash-tts": {"input_tokens": 0, "output_tokens": 0},
             "gemini-3.8-flash-lite-tts": {"input_tokens": 0, "output_tokens": 0},
         }
@@ -259,6 +265,22 @@ class GeminiAPI:
             for model in self.PRICING
         }
         self.previous_cost_usd = 0.0
+
+    def _record_usage(self, model: str, response):
+        """Records prompt, candidate, and thinking token counts (billed as output tokens)."""
+        usage_meta = getattr(response, "usage_metadata", None)
+        if not usage_meta:
+            return
+        prompt_tokens = getattr(usage_meta, "prompt_token_count", 0)
+        cand_tokens = getattr(usage_meta, "candidates_token_count", 0)
+        thoughts_tokens = getattr(usage_meta, "thoughts_token_count", 0)
+        in_tok = prompt_tokens if isinstance(prompt_tokens, int) and not isinstance(prompt_tokens, bool) else 0
+        out_tok = (
+            (cand_tokens if isinstance(cand_tokens, int) and not isinstance(cand_tokens, bool) else 0)
+            + (thoughts_tokens if isinstance(thoughts_tokens, int) and not isinstance(thoughts_tokens, bool) else 0)
+        )
+        self.usage[model]["input_tokens"] += in_tok
+        self.usage[model]["output_tokens"] += out_tok
 
     def _dump_request(self, label: str, **kwargs):
         self.request_counter += 1
@@ -379,7 +401,7 @@ CHUNK TO PROCESS:
 """
         response = self._generate_content_with_retry(
             label=f"translate_chunk_{chunk_index + 1}",
-            model="gemini-3.7-flash",
+            model=self.text_model,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -396,9 +418,7 @@ CHUNK TO PROCESS:
                 "paragraphs": [{"id": 1, "originalText": chunk, "translatedText": chunk, "turns": [{"speaker": "Narrator", "text": chunk}]}]
             }
 
-        if hasattr(response, 'usage_metadata') and response.usage_metadata:
-            self.usage["gemini-3.7-flash"]["input_tokens"] += getattr(response.usage_metadata, 'prompt_token_count', 0)
-            self.usage["gemini-3.7-flash"]["output_tokens"] += getattr(response.usage_metadata, 'candidates_token_count', 0)
+        self._record_usage(self.text_model, response)
 
         raw_text = (response.text or "").strip()
         if not raw_text:
@@ -530,9 +550,7 @@ CHUNK TO PROCESS:
                     automatic_function_calling=dict(disable=True),
                 )
             )
-            if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                self.usage[self.tts_model]["input_tokens"] += getattr(response.usage_metadata, 'prompt_token_count', 0)
-                self.usage[self.tts_model]["output_tokens"] += getattr(response.usage_metadata, 'candidates_token_count', 0)
+            self._record_usage(self.tts_model, response)
 
             candidate = response.candidates[0]
             audio_data = None
@@ -619,7 +637,7 @@ Return strictly JSON format:
         try:
             response = self._generate_content_with_retry(
                 label="find_character_merges",
-                model="gemini-3.7-flash",
+                model=self.text_model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -642,9 +660,7 @@ Return strictly JSON format:
                     }
                 )
             )
-            if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                self.usage["gemini-3.7-flash"]["input_tokens"] += getattr(response.usage_metadata, 'prompt_token_count', 0)
-                self.usage["gemini-3.7-flash"]["output_tokens"] += getattr(response.usage_metadata, 'candidates_token_count', 0)
+            self._record_usage(self.text_model, response)
             raw_text = response.text or "{}"
             data = json.loads(raw_text)
             return data.get("merges", [])

@@ -210,6 +210,81 @@ class TestResumability(unittest.TestCase):
         self.assertIn("$0.460000", output)
         self.assertIn("$0.700000", output)
 
+    @patch.dict('os.environ', {'GEMINI_API_KEY': 'fake_key'})
+    @patch('pangloss.api.genai.Client')
+    @patch('pangloss.cli.CacheEngine')
+    @patch('builtins.open', new_callable=unittest.mock.mock_open, read_data="Para 1")
+    def test_save_and_resume_gemini_3_8_flash_costs(self, mock_file, mock_engine_class, mock_genai_client):
+        import io
+        from contextlib import redirect_stdout
+        from pangloss.api import GeminiAPI
+
+        mock_engine = mock_engine_class.return_value
+        mock_engine.job_id = "test_3_8_cost_job"
+
+        # Prior session used gemini-3.8-flash:
+        # 100,000 input ($0.75/1M = $0.075000) + 10,000 output ($3.75/1M = $0.037500) = $0.112500
+        saved_metadata = {
+            "title": "Existing Title",
+            "characters": [
+                {"name": "Narrator", "description": "Narrator", "voice": "Rasalgethi", "voiceProfile": "Firm"}
+            ],
+            "difficultWords": [],
+            "paragraphs": [
+                {"id": 1, "originalText": "Para 1", "translatedText": "Absatz 1", "turns": [{"speaker": "Narrator", "text": "Absatz 1"}]}
+            ],
+            "processed_chunks": [{"start": 0, "end": 6}],
+            "characters_merged": True,
+            "api_usage": {
+                "gemini-3.8-flash": {"input_tokens": 100_000, "output_tokens": 10_000, "cost_usd": 0.1125},
+            },
+            "total_cost_usd": 0.1125,
+        }
+        mock_engine.load_metadata.return_value = saved_metadata
+        mock_engine.list_cached_audio.return_value = [1]
+
+        # On resume with --merge-characters, LLM merge check runs on gemini-3.8-flash:
+        # 40,000 input ($0.030000) + 2,000 output ($0.007500) = $0.037500 -> cumulative $0.150000
+        def fake_merge_chars(self_api, chars):
+            self_api.usage["gemini-3.8-flash"]["input_tokens"] += 40_000
+            self_api.usage["gemini-3.8-flash"]["output_tokens"] += 2_000
+            return []
+
+        args = argparse.Namespace(
+            filepath="fake.md",
+            target_lang="German",
+            source_lang="English",
+            level="B1",
+            output_dir="./out",
+            render_only=None,
+            import_characters=None,
+            merge_characters=True,
+            lite=False,
+            dry_run=False,
+            dump_requests=None,
+            serve=False,
+        )
+
+        # Ensure len(characters) > 1 so merge pass triggers
+        saved_metadata["characters"].append(
+            {"name": "Alice", "description": "Alice", "voice": "Zephyr", "voiceProfile": "Bright"}
+        )
+
+        buf = io.StringIO()
+        with patch.object(GeminiAPI, 'find_character_merges_with_llm', autospec=True, side_effect=fake_merge_chars), \
+             patch('pangloss.cli.chunk_text', return_value=[{"text": "Para 1", "start": 0, "end": 6}]), \
+             patch('pangloss.cli.export_results', return_value="fake.html"), \
+             redirect_stdout(buf):
+            run_build(args)
+
+        output = buf.getvalue()
+        self.assertEqual(saved_metadata["api_usage"]["gemini-3.8-flash"]["input_tokens"], 140_000)
+        self.assertEqual(saved_metadata["api_usage"]["gemini-3.8-flash"]["output_tokens"], 12_000)
+        self.assertAlmostEqual(saved_metadata["api_usage"]["gemini-3.8-flash"]["cost_usd"], 0.15, places=6)
+        self.assertAlmostEqual(saved_metadata.get("total_cost_usd"), 0.15, places=6)
+        self.assertIn("$0.037500", output)
+        self.assertIn("$0.150000", output)
+
 
 if __name__ == "__main__":
     unittest.main()

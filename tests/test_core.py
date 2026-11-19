@@ -80,22 +80,40 @@ def test_partition_narrator_splitting():
 def test_token_usage_and_tts_generation():
     with patch('google.genai.Client'):
         api = GeminiAPI(api_key="fake")
-        assert "gemini-3.7-flash" in api.usage
+        assert api.text_model == "gemini-3.8-flash"
+        assert "gemini-3.8-flash" in api.usage
         assert "gemini-3.8-flash-tts" in api.usage
         assert "gemini-3.8-flash-lite-tts" in api.usage
         
-        # Test translation tracking
+        # Test translation tracking (including thinking tokens billed as output tokens)
         mock_response = MagicMock()
         mock_response.text = '{"title": "Test Story"}'
         mock_response.usage_metadata.prompt_token_count = 120
         mock_response.usage_metadata.candidates_token_count = 350
+        mock_response.usage_metadata.thoughts_token_count = 50
         api.client.models.generate_content.return_value = mock_response
         
         api.process_chunk("Chunk content", "German", "B1", "English", True, {
             "title": "", "characters": [], "difficultWords": [], "paragraphs": []
         }, 0, 1)
-        assert api.usage["gemini-3.7-flash"]["input_tokens"] == 120
-        assert api.usage["gemini-3.7-flash"]["output_tokens"] == 350
+        assert api.client.models.generate_content.call_args.kwargs["model"] == "gemini-3.8-flash"
+        assert api.usage["gemini-3.8-flash"]["input_tokens"] == 120
+        assert api.usage["gemini-3.8-flash"]["output_tokens"] == 400
+        expected_cost = 120 * (0.75 / 1_000_000) + 400 * (3.75 / 1_000_000)
+        assert abs(api.get_session_cost() - expected_cost) < 1e-12
+
+        # Test find_character_merges_with_llm uses gemini-3.8-flash and records tokens
+        mock_merge_response = MagicMock()
+        mock_merge_response.text = '{"merges": []}'
+        mock_merge_response.usage_metadata.prompt_token_count = 20
+        mock_merge_response.usage_metadata.candidates_token_count = 10
+        mock_merge_response.usage_metadata.thoughts_token_count = 5
+        api.client.models.generate_content.return_value = mock_merge_response
+        merges = api.find_character_merges_with_llm([{"name": "A"}, {"name": "B"}])
+        assert merges == []
+        assert api.client.models.generate_content.call_args.kwargs["model"] == "gemini-3.8-flash"
+        assert api.usage["gemini-3.8-flash"]["input_tokens"] == 140
+        assert api.usage["gemini-3.8-flash"]["output_tokens"] == 415
         
         # Test 3.8 Flash Lite TTS
         sample_wav = pcm_to_wav(b'\x01\x00' * 50, sample_rate=24000)
@@ -139,7 +157,12 @@ def test_dry_run_and_dump_requests(tmp_path):
     
     dumped_files = list((tmp_path / "dumped").glob("*.json"))
     assert len(dumped_files) == 2
-    
+
+    translate_dump = next(f for f in dumped_files if "translate" in f.name)
+    with open(translate_dump, "r") as f:
+        translate_data = json.load(f)
+        assert translate_data["model"] == "gemini-3.8-flash"
+
     tts_dump = next(f for f in dumped_files if "tts" in f.name)
     with open(tts_dump, "r") as f:
         data = json.load(f)
